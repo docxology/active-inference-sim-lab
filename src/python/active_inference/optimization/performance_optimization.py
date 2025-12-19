@@ -26,6 +26,15 @@ class LRUCache:
     """Thread-safe Least Recently Used cache implementation."""
     
     def __init__(self, max_size: int = 1000):
+        """
+        Initialize LRU cache with specified maximum size.
+
+        Args:
+            max_size: Maximum number of items to store in cache
+
+        Note:
+            Thread-safe implementation using RLock for concurrent access.
+        """
         self.max_size = max_size
         self.cache = OrderedDict()
         self.lock = threading.RLock()
@@ -33,6 +42,18 @@ class LRUCache:
         self.misses = 0
     
     def get(self, key: str) -> Optional[Any]:
+        """
+        Retrieve value from cache by key.
+
+        Args:
+            key: Cache key to look up
+
+        Returns:
+            Cached value if found, None otherwise
+
+        Note:
+            Updates LRU ordering - retrieved items become most recently used.
+        """
         with self.lock:
             if key in self.cache:
                 # Move to end (most recently used)
@@ -45,22 +66,60 @@ class LRUCache:
                 return None
     
     def put(self, key: str, value: Any) -> None:
+        """
+        Store value in cache with specified key.
+
+        Args:
+            key: Cache key for storage
+            value: Value to cache
+
+        Note:
+            If cache is at max_size, removes least recently used item.
+            If key already exists, updates value and moves to most recently used.
+        """
         with self.lock:
             if key in self.cache:
                 self.cache.pop(key)
             elif len(self.cache) >= self.max_size:
                 # Remove least recently used item
                 self.cache.popitem(last=False)
-            
+
             self.cache[key] = value
     
     def clear(self) -> None:
+        """
+        Clear all items from cache and reset statistics.
+
+        Note:
+            Thread-safe operation that resets hit/miss counters.
+        """
         with self.lock:
             self.cache.clear()
             self.hits = 0
             self.misses = 0
     
     def stats(self) -> Dict[str, Any]:
+        """
+        Get memory pool statistics.
+        
+        Returns:
+            Dictionary containing pool statistics:
+            - hits: Number of pool hits
+            - misses: Number of pool misses
+            - hit_rate: Pool hit rate
+            - current_size: Current number of arrays in pool
+        """
+    
+        """
+        Get cache performance statistics.
+
+        Returns:
+            Dictionary containing cache statistics:
+            - hits: Number of cache hits
+            - misses: Number of cache misses
+            - hit_rate: Cache hit rate (0.0 to 1.0)
+            - size: Current number of items in cache
+        """
         with self.lock:
             total = self.hits + self.misses
             hit_rate = self.hits / total if total > 0 else 0.0
@@ -77,6 +136,12 @@ class MemoryPool:
     """Memory pool for efficient numpy array allocation."""
     
     def __init__(self, pool_size: int = 100):
+        """
+        Initialize memory pool with specified size.
+        
+        Args:
+            pool_size: Maximum number of arrays to keep in pool
+        """
         self.pool_size = pool_size
         self.pools = {}  # shape -> deque of arrays
         self.lock = threading.RLock()
@@ -84,6 +149,16 @@ class MemoryPool:
         self.pool_hits = 0
     
     def get_array(self, shape: Tuple[int, ...], dtype=np.float32) -> np.ndarray:
+        """
+        Get or create numpy array with specified shape and dtype.
+
+        Args:
+            shape: Tuple specifying array dimensions
+            dtype: NumPy data type for the array
+
+        Returns:
+            NumPy array with requested specifications
+        """
         key = (shape, dtype)
         
         with self.lock:
@@ -97,6 +172,16 @@ class MemoryPool:
                 return np.zeros(shape, dtype=dtype)
     
     def return_array(self, array: np.ndarray) -> None:
+        """
+        Return array to pool for reuse.
+        
+        Args:
+            array: NumPy array to return to pool
+            
+        Note:
+            Array will be kept for future reuse if pool not at capacity.
+        """
+    
         key = (array.shape, array.dtype)
         
         with self.lock:
@@ -107,6 +192,17 @@ class MemoryPool:
                 self.pools[key].append(array)
     
     def stats(self) -> Dict[str, Any]:
+        """
+        Get memory pool statistics.
+        
+        Returns:
+            Dictionary containing pool statistics:
+            - hits: Number of pool hits
+            - misses: Number of pool misses
+            - hit_rate: Pool hit rate
+            - current_size: Current number of arrays in pool
+        """
+    
         with self.lock:
             total = self.allocations + self.pool_hits
             pool_hit_rate = self.pool_hits / total if total > 0 else 0.0

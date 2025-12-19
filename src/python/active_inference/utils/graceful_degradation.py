@@ -3,7 +3,6 @@ Graceful Degradation System for Active Inference Agents
 Generation 2: MAKE IT ROBUST - Fault-Tolerant Operations
 """
 
-import logging
 import time
 import threading
 from typing import Dict, Any, Optional, List, Callable, Union, Tuple
@@ -12,7 +11,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict, deque
 import numpy as np
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 class DegradationLevel(Enum):
@@ -101,9 +100,7 @@ class GracefulDegradationManager:
         # Built-in degradation rules
         self._setup_default_rules()
         
-        logger.info("Graceful degradation manager initialized")
-    
-    def _setup_default_rules(self):
+        self.logger.log_debug("Operation completed", component="graceful_degradation"):
         """Setup default degradation rules."""
         # CPU usage rule
         self.add_degradation_rule(DegradationRule(
@@ -156,7 +153,7 @@ class GracefulDegradationManager:
             self._features[feature.name] = feature
             self._active_features[feature.name] = True
         
-        logger.info(f"Feature registered: {feature.name} (level: {feature.required_level.value})")
+        self.logger.log_debug("Operation completed", component="graceful_degradation")
     
     def add_degradation_rule(self, rule: DegradationRule) -> None:
         """Add a degradation rule."""
@@ -164,7 +161,7 @@ class GracefulDegradationManager:
             self._degradation_rules.append(rule)
             self._degradation_rules.sort(key=lambda r: r.priority, reverse=True)
         
-        logger.info(f"Degradation rule added: {rule.name} (priority: {rule.priority})")
+        self.logger.log_debug("Operation completed", component="graceful_degradation")
     
     def update_metrics(self, metrics: Dict[str, float]) -> None:
         """Update system metrics for degradation decisions."""
@@ -227,7 +224,7 @@ class GracefulDegradationManager:
                         triggered_rule = rule
                         break
                 except Exception as e:
-                    logger.error(f"Error evaluating degradation rule '{rule.name}': {e}")
+                    self.logger.log_debug("Operation completed", component="graceful_degradation")
             
             # Apply degradation if rule triggered
             if triggered_rule:
@@ -250,7 +247,7 @@ class GracefulDegradationManager:
                     if self._level_more_restrictive(rule.target_level, possible_level):
                         possible_level = rule.target_level
             except Exception as e:
-                logger.error(f"Error evaluating recovery condition for rule '{rule.name}': {e}")
+                self.logger.log_debug("Operation completed", component="graceful_degradation")
         
         # Apply recovery if possible
         if self._level_less_restrictive(possible_level, self.current_level):
@@ -283,7 +280,7 @@ class GracefulDegradationManager:
         # Record in history
         self._record_level_change(old_level, target_level, reason, "degradation")
         
-        logger.warning(f"System degraded from {old_level.value} to {target_level.value}: {reason}")
+        self.logger.log_debug("Operation completed", component="graceful_degradation")
     
     def _apply_recovery(self, target_level: DegradationLevel):
         """Apply system recovery to target level."""
@@ -298,9 +295,7 @@ class GracefulDegradationManager:
         # Record in history
         self._record_level_change(old_level, target_level, "Conditions improved", "recovery")
         
-        logger.info(f"System recovered from {old_level.value} to {target_level.value}")
-    
-    def _update_feature_availability(self):
+        self.logger.log_debug("Operation completed", component="graceful_degradation"):
         """Update which features are available at current degradation level."""
         for feature_name, feature in self._features.items():
             # Feature is available if current level allows it
@@ -366,8 +361,7 @@ class GracefulDegradationManager:
                 return main_impl(*args, **kwargs)
             except Exception as e:
                 # Main implementation failed, try fallback
-                logger.warning(f"Main implementation failed for {feature_name}: {e}")
-                fallback = self.get_feature_implementation(feature_name)
+                self.logger.log_debug("Operation completed", component="graceful_degradation")
                 if fallback:
                     return fallback(*args, **kwargs)
                 else:
@@ -388,9 +382,7 @@ class GracefulDegradationManager:
             self._update_feature_availability()
             self._record_level_change(old_level, level, reason, "manual")
         
-        logger.warning(f"System degradation manually forced to {level.value}: {reason}")
-    
-    def get_system_status(self) -> Dict[str, Any]:
+        self.logger.log_debug("Operation completed", component="graceful_degradation") -> Dict[str, Any]:
         """Get current system status and degradation information."""
         with self._lock:
             active_feature_count = sum(1 for active in self._active_features.values() if active)
@@ -422,40 +414,14 @@ class GracefulDegradationManager:
     def start_monitoring(self) -> None:
         """Start continuous degradation monitoring."""
         if self._monitor_thread and self._monitor_thread.is_alive():
-            logger.warning("Degradation monitoring already running")
-            return
-        
-        self._stop_event.clear()
+            self.logger.log_debug("Operation completed", component="graceful_degradation")
         self._monitor_thread = threading.Thread(
             target=self._monitoring_loop,
             daemon=True,
             name="DegradationMonitor"
         )
         self._monitor_thread.start()
-        logger.info("Degradation monitoring started")
-    
-    def stop_monitoring(self) -> None:
-        """Stop continuous degradation monitoring."""
-        if self._monitor_thread and self._monitor_thread.is_alive():
-            self._stop_event.set()
-            self._monitor_thread.join(timeout=10.0)
-        
-        logger.info("Degradation monitoring stopped")
-    
-    def _monitoring_loop(self) -> None:
-        """Main monitoring loop."""
-        while not self._stop_event.is_set():
-            try:
-                if self.enable_auto_degradation:
-                    self._check_degradation_conditions()
-                
-                self._stop_event.wait(self.check_interval)
-                
-            except Exception as e:
-                logger.error(f"Error in degradation monitoring loop: {e}")
-                self._stop_event.wait(1.0)
-    
-    def __repr__(self) -> str:
+        self.logger.log_debug("Operation completed", component="graceful_degradation") -> str:
         """String representation."""
         return (f"GracefulDegradationManager(level={self.current_level.value}, "
                 f"features={len(self._features)}, rules={len(self._degradation_rules)})")

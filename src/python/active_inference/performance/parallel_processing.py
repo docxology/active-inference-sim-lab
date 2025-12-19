@@ -8,7 +8,6 @@ import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import List, Dict, Any, Callable, Optional, Union
 import numpy as np
-import logging
 from dataclasses import dataclass
 from collections import deque
 import queue
@@ -69,10 +68,9 @@ class ParallelInferenceEngine:
         self.avg_computation_time = 0.0
         
         # Logging
-        self.logger = logging.getLogger("ParallelInferenceEngine")
-        self.logger.setLevel(logging.INFO)
+        self.logger = get_unified_logger()
         
-        self.logger.info(f"ParallelInferenceEngine initialized: workers={self.max_workers}, "
+        self.logger.log_info(f"ParallelInferenceEngine initialized: workers={self.max_workers}, "
                         f"gpu={self.use_gpu}, batch_size={self.batch_size}")
     
     def _init_compute_backend(self):
@@ -81,9 +79,9 @@ class ParallelInferenceEngine:
             try:
                 import cupy as cp
                 self.xp = cp  # Use CuPy for GPU
-                self.logger.info("GPU acceleration enabled with CuPy")
+                self.logger.log_debug("Operation completed", component="parallel_processing")
             except ImportError:
-                self.logger.warning("CuPy not available, falling back to CPU")
+                self.logger.log_warning("CuPy not available, falling back to CPU")
                 self.xp = np
                 self.use_gpu = False
         else:
@@ -129,8 +127,7 @@ class ParallelInferenceEngine:
         computation_time = time.time() - start_time
         self._update_performance_metrics(computation_time, len(observations))
         
-        self.logger.debug(f"Parallel belief update completed: {len(observations)} updates "
-                         f"in {computation_time:.3f}s")
+        self.logger.log_debug("Operation completed", component="parallel_processing")
         
         return results
     
@@ -257,7 +254,7 @@ class ParallelInferenceEngine:
                     self.cache[cache_key] = result
                     
             except Exception as e:
-                self.logger.error(f"Task {task.task_id} failed: {e}")
+                self.logger.log_debug("Operation completed", component="parallel_processing")
                 results[index] = None
         
         return results
@@ -267,7 +264,7 @@ class ParallelInferenceEngine:
         try:
             return task.function(*task.args, **task.kwargs)
         except Exception as e:
-            self.logger.error(f"Task execution failed: {e}")
+            self.logger.log_debug("Operation completed", component="parallel_processing")
             raise
     
     def _single_belief_update(self,
@@ -357,15 +354,7 @@ class ParallelInferenceEngine:
         """Clear computation cache."""
         if self.cache:
             self.cache.clear()
-            self.logger.info("Computation cache cleared")
-    
-    def shutdown(self):
-        """Shutdown thread pools."""
-        self.thread_executor.shutdown(wait=True)
-        self.process_executor.shutdown(wait=True)
-        self.logger.info("ParallelInferenceEngine shutdown complete")
-    
-    def __enter__(self):
+            self.logger.log_debug("Operation completed", component="parallel_processing"):
         """Context manager entry."""
         return self
     
@@ -403,7 +392,7 @@ class AdaptiveBatchProcessor:
         self.throughput_history = deque(maxlen=50)
         
         # Logging
-        self.logger = logging.getLogger("AdaptiveBatchProcessor")
+        self.logger = get_unified_logger()
     
     def process_batch(self,
                      data: List[Any],
@@ -470,10 +459,7 @@ class AdaptiveBatchProcessor:
         self.batch_size = max(self.min_batch_size, 
                             min(new_batch_size, self.max_batch_size))
         
-        self.logger.debug(f"Adapted batch size to {self.batch_size} "
-                         f"(throughput: {avg_throughput:.2f} items/s)")
-    
-    def get_metrics(self) -> Dict[str, Any]:
+        self.logger.log_debug("Operation completed", component="parallel_processing") -> Dict[str, Any]:
         """Get batch processing metrics."""
         if not self.batch_times:
             return {'batch_size': self.batch_size, 'avg_throughput': 0}

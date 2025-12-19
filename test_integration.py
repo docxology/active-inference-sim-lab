@@ -35,9 +35,9 @@ try:
     )
     
     from active_inference.core.beliefs import Belief, BeliefState
-    from active_inference.utils.validation import validate_inputs, ValidationError
-    from active_inference.utils.logging import setup_logging, get_logger
-    from active_inference.utils.caching import memoize, LRUCache
+    from active_inference.utils.advanced_validation import validate_inputs, ValidationError
+    from active_inference.utils.logging_config import setup_logging, get_logger
+    from active_inference.performance.caching import memoize, LRUCache
     
     print("✅ All imports successful")
     

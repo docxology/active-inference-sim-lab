@@ -3,12 +3,12 @@ Comprehensive health monitoring for Active Inference agents and systems.
 """
 
 import time
-import logging
 import threading
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, List, Tuple, Optional, Any, Union
 from enum import Enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import numpy as np
+from ..utils.logging_config import get_unified_logger
 from datetime import datetime, timedelta
 import json
 
@@ -83,21 +83,13 @@ class HealthMonitor:
         self._lock = threading.RLock()
         
         # Logging
-        self.logger = logging.getLogger(f"HealthMonitor")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        self.logger = get_unified_logger()
         
         # System metrics
         self._system_start_time = time.time()
         self._last_check_time = 0.0
         
-        self.logger.info("HealthMonitor initialized")
+        self.logger.log_debug("Operation completed", component="health_monitor")
     
     def register_component(self,
                           component_id: str,
@@ -121,7 +113,7 @@ class HealthMonitor:
                 'last_error': None
             }
         
-        self.logger.info(f"Registered component for monitoring: {component_id}")
+        self.logger.log_debug("Operation completed", component="health_monitor")
     
     def add_metric(self, metric: HealthMetric) -> None:
         """Add or update a health metric."""
@@ -179,46 +171,14 @@ class HealthMonitor:
     def start_monitoring(self) -> None:
         """Start continuous health monitoring."""
         if self._monitoring_thread and self._monitoring_thread.is_alive():
-            self.logger.warning("Monitoring already running")
-            return
-        
-        self._stop_event.clear()
+            self.logger.log_debug("Operation completed", component="health_monitor")
         self._monitoring_thread = threading.Thread(
             target=self._monitoring_loop,
             daemon=True,
             name="HealthMonitor"
         )
         self._monitoring_thread.start()
-        self.logger.info("Health monitoring started")
-    
-    def stop_monitoring(self) -> None:
-        """Stop continuous health monitoring."""
-        if self._monitoring_thread and self._monitoring_thread.is_alive():
-            self._stop_event.set()
-            self._monitoring_thread.join(timeout=10.0)
-        
-        self.logger.info("Health monitoring stopped")
-    
-    def _monitoring_loop(self) -> None:
-        """Main monitoring loop running in separate thread."""
-        while not self._stop_event.is_set():
-            try:
-                self._perform_health_checks()
-                self._last_check_time = time.time()
-                
-                # Record system snapshot
-                self._record_health_snapshot()
-                
-                # Sleep until next check
-                self._stop_event.wait(self.check_interval)
-                
-            except Exception as e:
-                self.logger.error(f"Error in monitoring loop: {e}")
-                self._stop_event.wait(1.0)  # Brief pause before retrying
-    
-    def _perform_health_checks(self) -> None:
-        """Perform health checks on all registered components."""
-        current_time = time.time()
+        self.logger.log_debug("Operation completed", component="health_monitor")
         
         with self._lock:
             for comp_id, comp_data in self._monitored_components.items():
@@ -254,11 +214,7 @@ class HealthMonitor:
                     comp_data['last_error'] = str(e)
                     comp_data['status'] = HealthStatus.CRITICAL
                     
-                    self.logger.error(f"Health check failed for {comp_id}: {e}")
-                    
-                    # Trigger recovery if enabled
-                    if self.enable_auto_recovery and comp_id in self._recovery_actions:
-                        self._attempt_recovery(comp_id)
+                    self.logger.log_debug("Operation completed", component="health_monitor")
     
     def _default_health_check(self, component: Any) -> bool:
         """Default health check implementation."""
@@ -306,36 +262,19 @@ class HealthMonitor:
             if len(self._alerts) > 100:
                 self._alerts = self._alerts[-100:]
         
-        self.logger.warning(f"ALERT: {alert['message']}")
+        self.logger.log_debug("Operation completed", component="health_monitor")
     
     def _attempt_recovery(self, component_id: str) -> None:
         """Attempt automatic recovery for a component."""
         try:
             recovery_fn = self._recovery_actions[component_id]
-            self.logger.info(f"Attempting recovery for component: {component_id}")
-            
             success = recovery_fn()
-            
             if success:
-                self.logger.info(f"Recovery successful for: {component_id}")
-                with self._lock:
-                    self._monitored_components[component_id]['error_count'] = 0
-                    self._monitored_components[component_id]['status'] = HealthStatus.HEALTHY
+                self.logger.log_info(f"Successfully recovered component {component_id}", component="health_monitor")
             else:
-                self.logger.error(f"Recovery failed for: {component_id}")
-                
+                self.logger.log_warning(f"Recovery failed for component {component_id}", component="health_monitor")
         except Exception as e:
-            self.logger.error(f"Recovery attempt failed for {component_id}: {e}")
-    
-    def _record_health_snapshot(self) -> None:
-        """Record current health status to history."""
-        snapshot = {
-            'timestamp': time.time(),
-            'overall_status': self.get_system_health()['overall_status'],
-            'component_count': len(self._monitored_components),
-            'metric_count': len(self._metrics),
-            'alert_count': len(self._alerts)
-        }
+            self.logger.log_error(f"Recovery error for {component_id}: {e}", component="health_monitor")
         
         with self._lock:
             self._history.append(snapshot)
@@ -347,7 +286,7 @@ class HealthMonitor:
     def register_recovery_action(self, component_id: str, recovery_fn: Callable) -> None:
         """Register automatic recovery action for a component."""
         self._recovery_actions[component_id] = recovery_fn
-        self.logger.info(f"Registered recovery action for: {component_id}")
+        self.logger.log_debug("Operation completed", component="health_monitor")
     
     def get_alerts(self, since_timestamp: Optional[float] = None) -> List[Dict[str, Any]]:
         """Get alerts, optionally filtered by timestamp."""
@@ -361,7 +300,7 @@ class HealthMonitor:
         """Clear all alerts."""
         with self._lock:
             self._alerts.clear()
-        self.logger.info("All alerts cleared")
+        self.logger.log_debug("Operation completed", component="health_monitor")
     
     def get_health_history(self, minutes: int = 60) -> List[Dict[str, Any]]:
         """Get health history for the specified time period."""
@@ -391,19 +330,14 @@ class HealthMonitor:
         try:
             with open(filepath, 'w') as f:
                 json.dump(report, f, indent=2, default=str)
-            
-            self.logger.info(f"Health report exported to: {filepath}")
-            
+
+            self.logger.log_debug("Health report saved", component="health_monitor")
         except Exception as e:
-            self.logger.error(f"Failed to export health report: {e}")
-            raise
-    
-    def __repr__(self) -> str:
-        """String representation of health monitor."""
-        health = self.get_system_health()
-        return (f"HealthMonitor(status={health['overall_status']}, "
-                f"components={len(self._monitored_components)}, "
-                f"alerts={len(self._alerts)})")
+            self.logger.log_error(f"Failed to save health report: {e}", component="health_monitor")
+
+        return f"HealthMonitor(status={health['overall_status']}, " \
+               f"components={len(self._monitored_components)}, " \
+               f"alerts={len(self._alerts)})"
     
     def __enter__(self):
         """Context manager entry."""

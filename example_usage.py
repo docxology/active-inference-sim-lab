@@ -21,7 +21,7 @@ from active_inference import (
     ActiveInferenceAgent,
     MockEnvironment
 )
-from active_inference.utils.logging import setup_logging
+from active_inference.utils.logging_config import setup_logging
 
 def main():
     print("🧠 Active Inference Simulation Laboratory - Example Usage")

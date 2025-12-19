@@ -12,12 +12,13 @@ Active Inference research, including:
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
-import logging
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from queue import Queue
+
+from ..utils.logging_config import get_unified_logger
 
 from ..core.agent import ActiveInferenceAgent
 from ..core.beliefs import Belief, BeliefState
@@ -55,7 +56,7 @@ class HierarchicalTemporalActiveInference:
         self.state_dims = state_dims or [8, 4, 2][:n_levels]
         self.coupling_strength = coupling_strength
         
-        self.logger = logging.getLogger("HTAI")
+        self.logger = get_unified_logger()
         
         # Initialize hierarchy levels
         self.levels = []
@@ -409,7 +410,7 @@ class MetaActiveInference:
     def __init__(self, base_agent: ActiveInferenceAgent, meta_learning_rate: float = 0.01):
         self.base_agent = base_agent
         self.meta_learning_rate = meta_learning_rate
-        self.logger = logging.getLogger("MetaActiveInference")
+        self.logger = get_unified_logger()
         
         # Meta-level components
         self.meta_beliefs = BeliefState()
@@ -456,7 +457,7 @@ class MetaActiveInference:
             
             # Early stopping if adaptation is good enough
             if adaptation_quality > 0.8:
-                self.logger.info(f"Early adaptation success for task {task_id} at step {step}")
+                self.logger.log_info(f"Early adaptation success for task {task_id} at step {step}", component="advanced_algorithms")
                 break
         
         adaptation_time = time.time() - start_time
@@ -469,7 +470,7 @@ class MetaActiveInference:
         self.meta_performance['adaptation_speed'].append(len(adaptation_steps))
         self.meta_performance['transfer_efficiency'].append(final_quality)
         
-        self.logger.info(f"Meta-adaptation completed for {task_id}: "
+        self.logger.log_info(f"Meta-adaptation completed for {task_id}: ", component="advanced_algorithms")
                         f"quality={final_quality:.3f}, steps={len(adaptation_steps)}, "
                         f"time={adaptation_time:.1f}s")
         
@@ -712,7 +713,7 @@ class QuantumInspiredVariationalInference:
     def __init__(self, n_qubits: int = 8, coherence_time: float = 1.0):
         self.n_qubits = n_qubits
         self.coherence_time = coherence_time
-        self.logger = logging.getLogger("QuantumInspiredVI")
+        self.logger = get_unified_logger()
         
         # Quantum-inspired state representation
         self.quantum_state = self._initialize_quantum_state()
@@ -761,7 +762,7 @@ class QuantumInspiredVariationalInference:
         
         processing_time = time.time() - start_time
         
-        self.logger.debug(f"Quantum belief update completed in {processing_time:.3f}s, "
+        self.logger.log_debug(f"Quantum belief update completed in {processing_time:.3f}s, ", component="advanced_algorithms")
                          f"coherence={coherence:.3f}")
         
         return updated_beliefs
@@ -937,7 +938,7 @@ class MultiModalActiveInference:
     def __init__(self, modalities: List[str], attention_mechanism: str = "dynamic"):
         self.modalities = modalities
         self.attention_mechanism = attention_mechanism
-        self.logger = logging.getLogger("MultiModalAI")
+        self.logger = get_unified_logger()
         
         # Modality-specific components
         self.modality_agents = {}
@@ -1044,7 +1045,7 @@ class MultiModalActiveInference:
                     modality_errors[modality] = modality_results[modality]['prediction_error']
                     
                 except Exception as e:
-                    self.logger.warning(f"Error processing {modality}: {e}")
+                    self.logger.log_warning(f"Error processing {modality}: {e}", component="advanced_algorithms")
                     modality_results[modality] = {'error': str(e)}
                     modality_errors[modality] = 1.0  # High error for failed modality
         
@@ -1311,7 +1312,7 @@ class ConcurrentInferenceEngine:
     def __init__(self, max_workers: int = 4):
         self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.logger = logging.getLogger("ConcurrentInference")
+        self.logger = get_unified_logger()
         
         # Performance tracking
         self.concurrent_performance = {
@@ -1344,7 +1345,7 @@ class ConcurrentInferenceEngine:
                 result = future.result()
                 results[agent_index] = result
             except Exception as e:
-                self.logger.error(f"Agent {agent.agent_id} processing failed: {e}")
+                self.logger.log_error(f"Agent {agent.agent_id} processing failed: {e}", component="advanced_algorithms")
                 results[agent_index] = {'error': str(e), 'agent_id': agent.agent_id}
         
         processing_time = time.time() - start_time
@@ -1410,7 +1411,7 @@ class ConcurrentInferenceEngine:
                 result = future.result()
                 results[config_index] = result
             except Exception as e:
-                self.logger.error(f"Experiment {config_index} failed: {e}")
+                self.logger.log_error(f"Experiment {config_index} failed: {e}", component="advanced_algorithms")
                 results[config_index] = {'error': str(e), 'config_index': config_index}
         
         total_time = time.time() - start_time
@@ -1433,4 +1434,4 @@ class ConcurrentInferenceEngine:
     def shutdown(self):
         """Shutdown the concurrent processing engine."""
         self.executor.shutdown(wait=True)
-        self.logger.info("Concurrent inference engine shut down")
+        self.logger.log_info("Concurrent inference engine shut down", component="advanced_algorithms")

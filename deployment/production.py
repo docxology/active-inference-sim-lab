@@ -26,7 +26,7 @@ sys.path.insert(0, str(src_path))
 from active_inference import ActiveInferenceAgent
 from active_inference.performance.optimization import OptimizedActiveInferenceAgent, OptimizationConfig
 from active_inference.performance.caching import BaseCache, CacheStrategy
-from active_inference.utils.logging import setup_logging
+from active_inference.utils.logging_config import setup_logging
 from active_inference.utils.health_check import health_check
 
 

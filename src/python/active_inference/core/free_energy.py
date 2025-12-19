@@ -8,9 +8,9 @@ active inference agents, including accuracy and complexity terms.
 import numpy as np
 from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
-import logging
 
 from .beliefs import Belief, BeliefState
+from ..utils.logging_config import get_unified_logger
 
 
 class ValidationError(ValueError):
@@ -89,7 +89,7 @@ class FreeEnergyObjective:
         self.complexity_weight = complexity_weight
         self.accuracy_weight = accuracy_weight
         self.temperature = temperature
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_unified_logger()
         self._error_count = {"validation": 0, "computation": 0, "expected_free_energy": 0}
     
     def compute_accuracy(self, 
@@ -256,14 +256,14 @@ class FreeEnergyObjective:
                 )
                 
                 if not future_fe.is_valid():
-                    self.logger.warning("Invalid future free energy computed")
+                    self.logger.log_warning("Invalid future free energy computed")
                     return float('inf')
                 
                 return future_fe.total
                 
             except Exception as e:
-                self.logger.error(f"Error computing future free energy: {e}")
-                return float('inf')  # Conservative fallback
+                self.logger.log_error(f"Error computing future free energy: {e}")
+                return float('inf', component="free_energy")  # Conservative fallback
             
         except (ValidationError, ModelError):
             # Re-raise specific errors
@@ -283,9 +283,9 @@ class FreeEnergyObjective:
         if error_type not in self._error_count:
             self._error_count[error_type] = 0
         self._error_count[error_type] += 1
-        self.logger.error(f"Free energy {error_type} error: {error}")
+        self.logger.log_error(f"Free energy {error_type} error: {error}")
     
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self, component="free_energy") -> Dict[str, Any]:
         """Get free energy computation statistics.
         
         Returns:
@@ -302,16 +302,16 @@ class FreeEnergyObjective:
                 'last_error': self._last_error
             }
         except Exception as e:
-            self.logger.error(f"Error getting statistics: {e}")
+            self.logger.log_error(f"Error getting statistics: {e}")
             return {'error': str(e)}
     
     def reset_statistics(self) -> None:
         """Reset error tracking statistics."""
         self._error_count = 0
         self._last_error = None
-        self.logger.info("Free energy statistics reset")
+        self.logger.log_info("Free energy statistics reset")
     
-    def __repr__(self) -> str:
+    def __repr__(self, component="free_energy") -> str:
         """String representation of free energy objective."""
         return (f"FreeEnergyObjective(complexity_weight={self.complexity_weight}, "
                 f"accuracy_weight={self.accuracy_weight}, temperature={self.temperature}, "
@@ -321,6 +321,6 @@ class FreeEnergyObjective:
         """Cleanup when objective is destroyed."""
         try:
             if hasattr(self, 'logger') and self.logger and self._error_count > 0:
-                self.logger.info(f"FreeEnergyObjective destroyed with {self._error_count} errors")
+                self.logger.log_info(f"FreeEnergyObjective destroyed with {self._error_count} errors", component="free_energy")
         except:
             pass  # Ignore errors during cleanup

@@ -43,7 +43,7 @@ class TestExampleUnitTests:
         
         result = x + y
         assert result.shape == (5, 3)
-        assert result.device == device
+        assert str(result.device) == device
     
     @pytest.mark.parametrize("input_size,expected_output", [
         (4, 8),

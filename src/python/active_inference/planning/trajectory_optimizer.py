@@ -8,7 +8,6 @@ for long-horizon planning in active inference agents.
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 from scipy.optimize import minimize
-import logging
 
 from ..core.beliefs import BeliefState
 from ..core.generative_model import GenerativeModel
@@ -52,7 +51,7 @@ class TrajectoryOptimizer:
         self.optimization_history = []
         
         # Setup logging
-        self.logger = logging.getLogger("TrajectoryOptimizer")
+        self.logger = get_unified_logger()
     
     def optimize_trajectory(self,
                           beliefs: BeliefState,
@@ -107,9 +106,9 @@ class TrajectoryOptimizer:
             'horizon': self.horizon
         }
         self.optimization_history.append(optimization_stats)
-        
-        self.logger.info(f"Trajectory optimization completed: cost={result.fun:.4f}")
-        
+
+        self.logger.log_debug(f"Trajectory optimization completed: length={len(optimal_trajectory)}", component="trajectory_optimizer")
+
         return optimal_trajectory
     
     def _evaluate_trajectory(self,

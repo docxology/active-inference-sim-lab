@@ -8,11 +8,11 @@ agent behavior, performance characteristics, and research insights.
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
-import logging
 from scipy import stats
 import json
 from pathlib import Path
 
+from ..utils.logging_config import get_unified_logger
 from ..core.agent import ActiveInferenceAgent
 from ..core.beliefs import BeliefState
 from .benchmarks import BenchmarkResult
@@ -39,7 +39,7 @@ class StatisticalAnalyzer:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("StatisticalAnalyzer")
+        self.logger = get_unified_logger()
     
     def analyze_learning_curves(self, 
                                experiment_results: List[ExperimentResult],
@@ -358,7 +358,7 @@ class PerformanceAnalyzer:
     """Analyzer for detailed performance characteristics."""
     
     def __init__(self):
-        self.logger = logging.getLogger("PerformanceAnalyzer")
+        self.logger = get_unified_logger()
     
     def analyze_sample_efficiency(self, 
                                  experiment_results: List[ExperimentResult]) -> AnalysisResult:
@@ -433,7 +433,7 @@ class BehaviorAnalyzer:
     """Analyzer for emergent behavior patterns."""
     
     def __init__(self):
-        self.logger = logging.getLogger("BehaviorAnalyzer")
+        self.logger = get_unified_logger()
     
     def analyze_exploration_patterns(self, 
                                    agent: ActiveInferenceAgent,
@@ -502,7 +502,7 @@ class NoveltyDetector:
     """Detector for novel or anomalous behaviors."""
     
     def __init__(self):
-        self.logger = logging.getLogger("NoveltyDetector")
+        self.logger = get_unified_logger()
     
     def detect_anomalous_performance(self, 
                                    experiment_results: List[ExperimentResult],

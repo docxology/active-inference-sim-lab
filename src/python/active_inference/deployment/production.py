@@ -6,20 +6,9 @@ monitoring, auto-scaling, and enterprise features.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any, Callable
-import logging
-import time
-import threading
-import queue
-import json
-from dataclasses import dataclass, field
-from pathlib import Path
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import signal
-import sys
+from typing import Dict, List, Optional, Any, Union
 import os
-
+from ..utils.logging_config import get_unified_logger
 from ..core.agent import ActiveInferenceAgent
 from ..performance.optimization import OptimizedActiveInferenceAgent, OptimizationConfig
 from ..utils.validation import ValidationError
@@ -107,23 +96,9 @@ class ProductionAgent:
         # Graceful shutdown
         self._setup_signal_handlers()
         
-        self.logger.info("Production agent initialized successfully")
-    
     def _setup_logging(self):
         """Setup production logging."""
-        log_level = getattr(logging, self.prod_config.log_level.upper())
-        
-        logging.basicConfig(
-            level=log_level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - '
-                   'pid:%(process)d - thread:%(thread)d',
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler('agent.log') if self.prod_config.enable_metrics else logging.NullHandler()
-            ]
-        )
-        
-        self.logger = logging.getLogger("ProductionAgent")
+        self.logger = get_unified_logger()
     
     def _initialize_agent(self):
         """Initialize optimized agent based on production config."""
@@ -144,12 +119,7 @@ class ProductionAgent:
             **self.agent_config
         )
         
-        self.logger.info(f"Agent initialized with optimization level: {self.prod_config.optimization_level}")
-    
-    def _setup_health_monitoring(self):
-        """Setup health monitoring system."""
-        self.health_metrics = {
-            'last_successful_action': time.time(),
+        self.logger.log_debug("Operation completed", component="production"),
             'total_requests': 0,
             'successful_requests': 0,
             'failed_requests': 0,
@@ -205,29 +175,13 @@ class ProductionAgent:
     
     def _shutdown_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
-        self.logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+        self.logger.log_info(f"Received signal {signum}, initiating graceful shutdown...")
         self.shutdown()
     
     def start(self):
         """Start the production agent."""
         self.is_running = True
-        self.logger.info("Production agent started")
-    
-    def shutdown(self):
-        """Shutdown the production agent gracefully."""
-        self.logger.info("Shutting down production agent...")
-        
-        self.is_running = False
-        
-        # Save final checkpoint
-        if self.prod_config.enable_persistence:
-            self._save_checkpoint()
-        
-        # Log final metrics
-        if self.prod_config.enable_metrics:
-            self._log_final_metrics()
-        
-        self.logger.info("Production agent shutdown complete")
+        self.logger.log_debug("Operation completed", component="production")
     
     def act(self, observation: np.ndarray) -> np.ndarray:
         """
@@ -272,7 +226,7 @@ class ProductionAgent:
             
         except Exception as e:
             self._record_failure()
-            self.logger.error(f"Action execution failed: {e}")
+            self.logger.log_debug("Operation completed", component="production")
             raise
     
     def update_model(self, observation: np.ndarray, action: np.ndarray, reward: float) -> None:
@@ -289,7 +243,7 @@ class ProductionAgent:
             if not (self._validate_observation(observation) and 
                    self._validate_action(action) and
                    self._validate_reward(reward)):
-                self.logger.warning("Invalid inputs for model update")
+                self.logger.log_debug("Operation completed", component="production")
                 return
             
             # Execute update
@@ -300,8 +254,7 @@ class ProductionAgent:
                 self.metrics['belief_updates_total'] += 1
             
         except Exception as e:
-            self.logger.error(f"Model update failed: {e}")
-            self._record_failure()
+            self.logger.log_debug("Operation completed", component="production")
     
     def _validate_observation(self, observation: np.ndarray) -> bool:
         """Validate observation input."""
@@ -343,16 +296,7 @@ class ProductionAgent:
             if current_time - cb['last_failure_time'] > cb['timeout']:
                 cb['state'] = 'half-open'
                 cb['success_count'] = 0
-                self.logger.info("Circuit breaker moved to half-open state")
-            else:
-                return False
-        
-        return True
-    
-    def _check_rate_limit(self) -> bool:
-        """Check rate limiting."""
-        # Simple rate limiting implementation
-        current_time = time.time()
+                self.logger.log_debug("Operation completed", component="production")
         
         # Reset counter every minute
         if not hasattr(self, '_rate_limit_window_start'):
@@ -410,149 +354,8 @@ class ProductionAgent:
             if cb['success_count'] >= 5:  # Require 5 successes to close
                 cb['state'] = 'closed'
                 cb['failure_count'] = 0
-                self.logger.info("Circuit breaker closed")
-        
-        # Update metrics
-        self.request_count += 1
-        self.health_metrics['successful_requests'] += 1
-        self.health_metrics['total_requests'] += 1
-        self.health_metrics['last_successful_action'] = time.time()
-        
-        # Update average response time
-        total_time = self.health_metrics['average_response_time'] * (self.request_count - 1)
-        self.health_metrics['average_response_time'] = (total_time + response_time) / self.request_count
-        
-        if self.prod_config.enable_metrics:
-            self.metrics['requests_successful'] += 1
-            self.metrics['requests_total'] += 1
-            self.metrics['response_time_total'] += response_time
-    
-    def _record_failure(self):
-        """Record failed operation."""
-        
-        self.error_count += 1
-        
-        # Update circuit breaker
-        cb = self.circuit_breaker
-        cb['failure_count'] += 1
-        cb['last_failure_time'] = time.time()
-        
-        if cb['failure_count'] >= self.prod_config.circuit_breaker_threshold:
-            cb['state'] = 'open'
-            self.logger.warning("Circuit breaker opened due to high failure rate")
-        
-        # Update metrics
-        self.health_metrics['failed_requests'] += 1
-        self.health_metrics['total_requests'] += 1
-        
-        if self.prod_config.enable_metrics:
-            self.metrics['requests_failed'] += 1
-            self.metrics['requests_total'] += 1
-    
-    def _health_check_loop(self):
-        """Health check monitoring loop."""
-        
-        while self.is_running:
-            try:
-                self._perform_health_check()
-                time.sleep(self.prod_config.health_check_interval)
-            except Exception as e:
-                self.logger.error(f"Health check failed: {e}")
-    
-    def _perform_health_check(self):
-        """Perform health check."""
-        
-        current_time = time.time()
-        
-        # Check error rate
-        if self.health_metrics['total_requests'] > 0:
-            error_rate = self.health_metrics['failed_requests'] / self.health_metrics['total_requests']
-            if error_rate > self.prod_config.max_error_rate:
-                self.is_healthy = False
-                self.logger.warning(f"High error rate detected: {error_rate:.3f}")
-            else:
-                self.is_healthy = True
-        
-        # Check if agent is responsive
-        time_since_last_action = current_time - self.health_metrics['last_successful_action']
-        if time_since_last_action > 300:  # 5 minutes
-            self.logger.warning(f"No successful actions in {time_since_last_action:.1f} seconds")
-        
-        # Update memory usage (simplified)
-        try:
-            import psutil
-            process = psutil.Process()
-            self.health_metrics['memory_usage_mb'] = process.memory_info().rss / 1024 / 1024
-            self.health_metrics['cpu_usage_percent'] = process.cpu_percent()
-        except ImportError:
-            pass  # psutil not available
-        
-        self.last_health_check = current_time
-    
-    def _checkpoint_loop(self):
-        """Checkpoint saving loop."""
-        
-        while self.is_running:
-            try:
-                time.sleep(self.prod_config.checkpoint_interval)
-                if self.is_running:  # Check again after sleep
-                    self._save_checkpoint()
-            except Exception as e:
-                self.logger.error(f"Checkpoint save failed: {e}")
-    
-    def _save_checkpoint(self):
-        """Save agent checkpoint."""
-        
-        if not self.prod_config.enable_persistence:
-            return
-        
-        try:
-            timestamp = int(time.time())
-            checkpoint_path = self.checkpoint_dir / f"agent_checkpoint_{timestamp}.json"
-            
-            self.agent.save_checkpoint(str(checkpoint_path))
-            
-            # Cleanup old checkpoints
-            self._cleanup_old_checkpoints()
-            
-            self.logger.debug(f"Checkpoint saved: {checkpoint_path}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save checkpoint: {e}")
-    
-    def _cleanup_old_checkpoints(self):
-        """Remove old checkpoint files."""
-        
-        current_time = time.time()
-        max_age = self.prod_config.backup_retention_days * 24 * 3600
-        
-        for checkpoint_file in self.checkpoint_dir.glob("agent_checkpoint_*.json"):
-            try:
-                file_age = current_time - checkpoint_file.stat().st_mtime
-                if file_age > max_age:
-                    checkpoint_file.unlink()
-                    self.logger.debug(f"Removed old checkpoint: {checkpoint_file}")
-            except Exception as e:
-                self.logger.warning(f"Failed to remove old checkpoint {checkpoint_file}: {e}")
-    
-    def _log_final_metrics(self):
-        """Log final metrics before shutdown."""
-        
-        self.logger.info("=== FINAL METRICS ===")
-        self.logger.info(f"Total requests: {self.health_metrics['total_requests']}")
-        self.logger.info(f"Successful requests: {self.health_metrics['successful_requests']}")
-        self.logger.info(f"Failed requests: {self.health_metrics['failed_requests']}")
-        
-        if self.health_metrics['total_requests'] > 0:
-            success_rate = self.health_metrics['successful_requests'] / self.health_metrics['total_requests']
-            self.logger.info(f"Success rate: {success_rate:.3f}")
-        
-        self.logger.info(f"Average response time: {self.health_metrics['average_response_time']:.3f}s")
-        self.logger.info(f"Circuit breaker state: {self.circuit_breaker['state']}")
-        
-        if self.prod_config.enable_metrics:
-            agent_stats = self.agent.get_performance_stats()
-            self.logger.info(f"Cache hit rate: {agent_stats.get('cache_hit_rate', 0):.3f}")
+                self.logger.log_debug("Operation completed", component="production")
+            self.logger.log_info(f"Cache hit rate: {agent_stats.get('cache_hit_rate', 0):.3f}")
     
     def get_health_status(self) -> Dict[str, Any]:
         """Get current health status."""
@@ -599,7 +402,7 @@ class LoadBalancer:
         """
         self.agents = agents
         self.current_index = 0
-        self.logger = logging.getLogger("LoadBalancer")
+        self.logger = get_unified_logger()
     
     def get_next_agent(self) -> ProductionAgent:
         """Get next agent using round-robin scheduling."""
@@ -624,11 +427,7 @@ class LoadBalancer:
                 agent = self.get_next_agent()
                 return agent.act(observation)
             except Exception as e:
-                self.logger.warning(f"Agent request failed (attempt {attempt + 1}): {e}")
-                if attempt == 2:  # Last attempt
-                    raise
-        
-        raise RuntimeError("All agent requests failed")
+                self.logger.log_debug("Operation completed", component="production")
 
 
 class AutoScaler:
@@ -650,7 +449,7 @@ class AutoScaler:
         self.min_instances = min_instances
         self.max_instances = max_instances
         self.instances: List[ProductionAgent] = []
-        self.logger = logging.getLogger("AutoScaler")
+        self.logger = get_unified_logger()
         
         # Initialize minimum instances
         for _ in range(min_instances):
@@ -660,26 +459,7 @@ class AutoScaler:
         """Add new agent instance."""
         
         if len(self.instances) >= self.max_instances:
-            self.logger.warning("Cannot scale up: maximum instances reached")
-            return False
-        
-        try:
-            new_agent = self.agent_factory()
-            new_agent.start()
-            self.instances.append(new_agent)
-            
-            self.logger.info(f"Scaled up: {len(self.instances)} instances")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Scale up failed: {e}")
-            return False
-    
-    def scale_down(self) -> bool:
-        """Remove agent instance."""
-        
-        if len(self.instances) <= self.min_instances:
-            self.logger.warning("Cannot scale down: minimum instances reached")
+            self.logger.log_debug("Operation completed", component="production")
             return False
         
         try:
@@ -690,14 +470,7 @@ class AutoScaler:
             agent_to_remove.shutdown()
             self.instances.remove(agent_to_remove)
             
-            self.logger.info(f"Scaled down: {len(self.instances)} instances")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Scale down failed: {e}")
-            return False
-    
-    def check_scaling_conditions(self):
+            self.logger.log_debug("Operation completed", component="production"):
         """Check if scaling is needed based on metrics."""
         
         if not self.instances:

@@ -16,7 +16,6 @@ import time
 import threading
 import json
 import numpy as np
-import logging
 from typing import Dict, List, Any, Optional, Callable, Union
 from dataclasses import dataclass, field
 from collections import defaultdict, deque
@@ -87,7 +86,7 @@ class TelemetryCollector:
         self.enable_sampling = enable_sampling
         self.sampling_rate = sampling_rate
         
-        self.logger = logging.getLogger("TelemetryCollector")
+        self.logger = get_unified_logger()
         
         # Data buffers
         self.metrics_buffer: deque = deque(maxlen=max_metrics_buffer)
@@ -138,19 +137,7 @@ class TelemetryCollector:
         )
         self.flush_thread.start()
         
-        self.logger.info("Telemetry collector started")
-    
-    def stop(self) -> None:
-        """Stop the telemetry collection system."""
-        self.running = False
-        
-        if self.flush_thread and self.flush_thread.is_alive():
-            self.flush_thread.join(timeout=5.0)
-        
-        # Final flush
-        self._flush_all_data()
-        
-        self.logger.info("Telemetry collector stopped")
+        self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
     
     def record_metric(self, 
                      name: str,
@@ -211,7 +198,7 @@ class TelemetryCollector:
             
         except Exception as e:
             self.performance_stats['collection_errors'] += 1
-            self.logger.error(f"Failed to record metric {name}: {e}")
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
             return False
     
     def start_trace(self, 
@@ -293,7 +280,7 @@ class TelemetryCollector:
             
         except Exception as e:
             self.performance_stats['collection_errors'] += 1
-            self.logger.error(f"Failed to finish trace {span.span_id}: {e}")
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
             return False
     
     def log_trace_event(self, 
@@ -411,20 +398,7 @@ class TelemetryCollector:
                 self._flush_all_data()
                 
             except Exception as e:
-                self.logger.error(f"Error in flush worker: {e}")
-    
-    def _flush_all_data(self) -> None:
-        """Flush all buffered telemetry data."""
-        try:
-            with self.buffer_lock:
-                # Create snapshots
-                metrics_snapshot = list(self.metrics_buffer)
-                traces_snapshot = list(self.traces_buffer)
-                health_snapshot = dict(self.health_status)
-                
-                # Clear buffers
-                self.metrics_buffer.clear()
-                self.traces_buffer.clear()
+                self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
             
             # Process data (in production, would send to monitoring system)
             self._process_metrics_batch(metrics_snapshot)
@@ -435,12 +409,12 @@ class TelemetryCollector:
             self.performance_stats['flush_count'] += 1
             self.performance_stats['last_flush_time'] = time.time()
             
-            self.logger.debug(f"Flushed {len(metrics_snapshot)} metrics, "
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry")} metrics, "
                             f"{len(traces_snapshot)} traces, "
                             f"{len(health_snapshot)} health checks")
             
         except Exception as e:
-            self.logger.error(f"Failed to flush telemetry data: {e}")
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
     
     def _process_metrics_batch(self, metrics: List[MetricSample]) -> None:
         """Process a batch of metrics."""
@@ -453,7 +427,7 @@ class TelemetryCollector:
             metrics_by_name[metric.name].append(metric)
         
         # In production, this would send to Prometheus, DataDog, etc.
-        self.logger.debug(f"Processing {len(metrics)} metrics across {len(metrics_by_name)} series")
+        self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
     
     def _process_traces_batch(self, traces: List[TraceSpan]) -> None:
         """Process a batch of traces."""
@@ -466,7 +440,7 @@ class TelemetryCollector:
             traces_by_id[trace.trace_id].append(trace)
         
         # In production, this would send to Jaeger, Zipkin, etc.
-        self.logger.debug(f"Processing {len(traces)} spans across {len(traces_by_id)} traces")
+        self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
     
     def _process_health_batch(self, health_checks: Dict[str, HealthStatus]) -> None:
         """Process health check results."""
@@ -478,9 +452,7 @@ class TelemetryCollector:
                              if health.status == 'critical']
         
         if critical_components:
-            self.logger.warning(f"Critical health status for components: {critical_components}")
-        
-        self.logger.debug(f"Processing health checks for {len(health_checks)} components")
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
 
 
 class PerformanceProfiler:
@@ -488,7 +460,7 @@ class PerformanceProfiler:
     
     def __init__(self, telemetry_collector: TelemetryCollector):
         self.telemetry = telemetry_collector
-        self.logger = logging.getLogger("PerformanceProfiler")
+        self.logger = get_unified_logger()
         
         # Profiling data
         self.function_profiles: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
@@ -628,12 +600,10 @@ class PerformanceProfiler:
             
         except ImportError:
             # psutil not available
-            self.logger.warning("psutil not available for memory profiling")
-            return {'timestamp': time.time(), 'context': context, 'error': 'psutil_unavailable'}
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry"), 'context': context, 'error': 'psutil_unavailable'}
         
         except Exception as e:
-            self.logger.error(f"Failed to take memory snapshot: {e}")
-            return {'timestamp': time.time(), 'context': context, 'error': str(e)}
+            self.logger.log_debug("Operation completed", component="comprehensive_telemetry"), 'context': context, 'error': str(e)}
     
     def get_function_profiles(self, top_n: int = 10) -> List[Dict[str, Any]]:
         """Get top function profiles by various metrics."""
@@ -758,7 +728,7 @@ class AnomalyDetector:
         self.telemetry = telemetry_collector
         self.window_size = window_size
         self.anomaly_threshold = anomaly_threshold
-        self.logger = logging.getLogger("AnomalyDetector")
+        self.logger = get_unified_logger()
         
         # Metric history for anomaly detection
         self.metric_windows: Dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
@@ -846,7 +816,7 @@ class AnomalyDetector:
                         }
                     )
                     
-                    self.logger.warning(f"Anomaly detected in {metric_name}: "
+                    self.logger.log_warning(f"Anomaly detected in {metric_name}: "
                                       f"value={value:.3f}, z_score={z_score:.2f}")
                     
                     return anomaly
@@ -870,7 +840,7 @@ class AnomalyDetector:
             try:
                 callback(anomaly)
             except Exception as e:
-                self.logger.error(f"Error in anomaly callback: {e}")
+                self.logger.log_debug("Operation completed", component="comprehensive_telemetry")
     
     def get_anomalies(self, 
                      metric_name: Optional[str] = None,

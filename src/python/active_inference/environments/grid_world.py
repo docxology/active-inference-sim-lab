@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, Any, Tuple, Optional, List
 from enum import Enum
-import logging
+from ..utils.logging_config import get_unified_logger
 
 
 class CellType(Enum):
@@ -79,7 +79,7 @@ class ActiveInferenceGridWorld:
         self.uncertainty_history = []
         
         # Logging
-        self.logger = logging.getLogger("GridWorld")
+        self.logger = get_unified_logger()
     
     def _setup_environment(self,
                           uncertainty_regions: Optional[List[Tuple[int, int]]],

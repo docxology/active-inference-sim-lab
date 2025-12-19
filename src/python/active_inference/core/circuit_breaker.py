@@ -4,14 +4,14 @@ Generation 2: MAKE IT ROBUST - Fault Tolerance & Resilience
 """
 
 import time
-import logging
 import threading
 from typing import Dict, Any, Optional, Callable, TypeVar, Generic
 from enum import Enum
 from dataclasses import dataclass
 from functools import wraps
+from ..utils.logging_config import get_unified_logger
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 T = TypeVar('T')
 

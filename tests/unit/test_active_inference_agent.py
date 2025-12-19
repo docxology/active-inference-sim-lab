@@ -39,7 +39,7 @@ class TestActiveInferenceAgent:
 
     def test_agent_invalid_dimensions(self):
         """Test agent initialization with invalid dimensions."""
-        from active_inference.utils.validation import ValidationError
+        from active_inference.utils.advanced_validation import ValidationError
         
         with pytest.raises(ValidationError):
             ActiveInferenceAgent(
@@ -73,7 +73,7 @@ class TestActiveInferenceAgent:
 
     def test_agent_act_invalid_observation(self):
         """Test agent action selection with invalid observation."""
-        from active_inference.utils.validation import ValidationError
+        from active_inference.utils.advanced_validation import ValidationError
         
         agent = ActiveInferenceAgent(
             state_dim=2,

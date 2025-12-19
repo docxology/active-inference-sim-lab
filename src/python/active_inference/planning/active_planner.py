@@ -7,7 +7,6 @@ expected free energy over a planning horizon.
 
 import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
-import logging
 
 from ..core.beliefs import BeliefState
 from ..core.generative_model import GenerativeModel
@@ -49,7 +48,7 @@ class ActivePlanner:
         self.planning_history = []
         
         # Setup logging
-        self.logger = logging.getLogger("ActivePlanner")
+        self.logger = get_unified_logger()
     
     def plan(self,
              beliefs: BeliefState,
@@ -94,9 +93,9 @@ class ActivePlanner:
             'horizon': horizon
         }
         self.planning_history.append(planning_stats)
-        
-        self.logger.debug(f"Selected action with EFE: {efe_components.total:.4f}")
-        
+
+        self.logger.log_debug(f"Planning completed: action={optimal_action}, efe={planning_stats['selected_efe']:.3f}", component="active_planner")
+
         return optimal_action
     
     def _generate_candidate_actions(self, action_dim: int) -> List[np.ndarray]:
@@ -201,7 +200,7 @@ class ActivePlanner:
     def reset_statistics(self) -> None:
         """Reset planning statistics."""
         self.planning_history = []
-        self.logger.info("Planning statistics reset")
+        self.logger.log_info("Planning statistics reset", component="active_planner")
     
     def update_planning_parameters(self, **kwargs) -> None:
         """
@@ -221,10 +220,8 @@ class ActivePlanner:
         
         if 'planning_method' in kwargs:
             self.planning_method = kwargs['planning_method']
-        
-        self.logger.info(f"Updated planning parameters: {kwargs}")
-    
-    def __repr__(self) -> str:
+
+    def __str__(self) -> str:
         """String representation of planner."""
         return (f"ActivePlanner(horizon={self.horizon}, "
                 f"n_samples={self.n_action_samples}, "

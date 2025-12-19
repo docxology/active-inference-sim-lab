@@ -4,15 +4,15 @@ Generation 2: MAKE IT ROBUST (Reliable)
 """
 
 import numpy as np
-import logging
 import time
 import hashlib
 from typing import Dict, Any, List, Optional, Set, Tuple
 from dataclasses import dataclass
 from collections import defaultdict, deque
 from enum import Enum
+from ..utils.logging_config import get_unified_logger
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 class ThreatLevel(Enum):

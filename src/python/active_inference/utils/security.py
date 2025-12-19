@@ -13,7 +13,6 @@ import threading
 from typing import Dict, Any, Optional, List, Callable, Union
 from dataclasses import dataclass
 from enum import Enum
-import logging
 import json
 import numpy as np
 from pathlib import Path
@@ -117,7 +116,7 @@ class InputSanitizer:
         
         # Check length
         if len(value) > self._max_string_length:
-            self.logger.warning(
+            self.logger.log_warning(
                 "String input exceeds maximum length",
                 LogCategory.SECURITY,
                 {
@@ -229,7 +228,7 @@ class InputSanitizer:
                         sanitized_list.append(sanitized_item)
                     except ValidationError:
                         # Skip malicious items
-                        self.logger.warning(
+                        self.logger.log_warning(
                             f"Skipping malicious item at {context}[{i}]",
                             LogCategory.SECURITY
                         )
@@ -277,7 +276,7 @@ class InputSanitizer:
                     sanitized_key = self.sanitize_string(key, f"{context}.key")
                 except ValidationError:
                     # Skip malicious keys
-                    self.logger.warning(
+                    self.logger.log_warning(
                         f"Skipping malicious key in {context}: {key[:50]}",
                         LogCategory.SECURITY
                     )
@@ -452,7 +451,7 @@ class SecurityMonitor:
         self.blocked_clients = set()
         self.quarantined_agents = set()
         
-        self.logger.info(
+        self.logger.log_info(
             "Security monitor initialized",
             LogCategory.SECURITY,
             {'config': self.config}
@@ -480,7 +479,7 @@ class SecurityMonitor:
                     file_config = json.load(f)
                 default_config.update(file_config)
             except Exception as e:
-                self.logger.warning(
+                self.logger.log_warning(
                     f"Failed to load security config from {config_file}: {e}",
                     LogCategory.SECURITY
                 )
@@ -618,7 +617,7 @@ class SecurityMonitor:
         """Manually unblock a client."""
         with self.lock:
             self.blocked_clients.discard(client_id)
-            self.logger.info(
+            self.logger.log_info(
                 f"Manually unblocked client {client_id}",
                 LogCategory.SECURITY
             )
@@ -627,7 +626,7 @@ class SecurityMonitor:
         """Manually unquarantine an agent."""
         with self.lock:
             self.quarantined_agents.discard(agent_id)
-            self.logger.info(
+            self.logger.log_info(
                 f"Manually unquarantined agent {agent_id}",
                 LogCategory.SECURITY
             )

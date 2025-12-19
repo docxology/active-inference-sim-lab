@@ -2,8 +2,8 @@
 Utility functions and classes for active inference.
 """
 
-from .validation import validate_inputs, ValidationError
-from .logging import setup_logging, get_logger
+from .advanced_validation import validate_inputs, ValidationError
+from .logging_config import setup_logging, get_logger
 
 __all__ = [
     "validate_inputs",

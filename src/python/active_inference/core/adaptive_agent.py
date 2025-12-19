@@ -4,12 +4,12 @@ Generation 2: MAKE IT ROBUST (Reliable)
 """
 
 import numpy as np
-import logging
 from typing import Dict, Any, Optional, Tuple, Union
 from .agent import ActiveInferenceAgent
-from ..utils.validation import SecurityValidator, AdvancedInputValidator
+from ..utils.advanced_validation import SecurityValidator, AdvancedInputValidator
+from ..utils.logging_config import get_unified_logger
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 class AdaptiveActiveInferenceAgent(ActiveInferenceAgent):

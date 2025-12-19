@@ -13,7 +13,6 @@ Generation 2: MAKE IT ROBUST, including:
 
 import time
 import threading
-import logging
 import traceback
 import random
 import asyncio
@@ -96,7 +95,7 @@ class CircuitBreaker:
         """
         self.name = name
         self.config = config or CircuitBreakerConfig()
-        self.logger = logging.getLogger(f"CircuitBreaker.{name}")
+        self.logger = get_unified_logger()
         
         # Circuit state
         self.state = CircuitState.CLOSED
@@ -139,7 +138,7 @@ class CircuitBreaker:
             
             # Check if circuit should allow request
             if not self._should_allow_request():
-                self.logger.warning(f"Circuit breaker {self.name} is OPEN, failing fast")
+                self.logger.log_warning(f"Circuit breaker {self.name} is OPEN, failing fast")
                 raise CircuitBreakerOpenException(f"Circuit breaker {self.name} is open")
             
             # Execute the function
@@ -170,7 +169,7 @@ class CircuitBreaker:
         elif self.state == CircuitState.OPEN:
             # Check if recovery timeout has passed
             if current_time - self.last_failure_time >= self.config.recovery_timeout:
-                self.logger.info(f"Circuit breaker {self.name} transitioning to HALF_OPEN")
+                self.logger.log_info(f"Circuit breaker {self.name} transitioning to HALF_OPEN", component="fault_tolerance")
                 self.state = CircuitState.HALF_OPEN
                 self.half_open_requests = 0
                 return True
@@ -194,7 +193,7 @@ class CircuitBreaker:
             # Successful request in half-open state
             if self.half_open_requests >= self.config.half_open_max_requests:
                 # Enough successful requests, close the circuit
-                self.logger.info(f"Circuit breaker {self.name} transitioning to CLOSED")
+                self.logger.log_info(f"Circuit breaker {self.name} transitioning to CLOSED", component="fault_tolerance")
                 self.state = CircuitState.CLOSED
                 self.failure_count = 0
                 self.recovery_count += 1
@@ -204,7 +203,7 @@ class CircuitBreaker:
             if self.failure_count > 0:
                 self.failure_count = max(0, self.failure_count - 1)
         
-        self.logger.debug(f"Circuit breaker {self.name} recorded success, "
+        self.logger.log_debug(f"Circuit breaker {self.name} recorded success, "
                          f"execution_time={execution_time:.3f}s")
     
     def _record_failure(self, error: Exception, execution_time: float) -> None:
@@ -228,14 +227,14 @@ class CircuitBreaker:
             self.failure_count >= self.config.failure_threshold and
             self.total_requests >= self.config.min_requests_threshold):
             
-            self.logger.warning(f"Circuit breaker {self.name} transitioning to OPEN "
-                              f"(failures: {self.failure_count})")
+            self.logger.log_warning(f"Circuit breaker {self.name} transitioning to OPEN "
+                              f"(failures: {self.failure_count})", component="fault_tolerance")
             self.state = CircuitState.OPEN
             self.circuit_open_count += 1
         
         elif self.state == CircuitState.HALF_OPEN:
             # Failure in half-open state, go back to open
-            self.logger.warning(f"Circuit breaker {self.name} transitioning back to OPEN "
+            self.logger.log_warning(f"Circuit breaker {self.name} transitioning back to OPEN "
                               f"(half-open failure)")
             self.state = CircuitState.OPEN
     
@@ -244,7 +243,7 @@ class CircuitBreaker:
         with self.lock:
             return self.state
     
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self, component="fault_tolerance") -> Dict[str, Any]:
         """Get circuit breaker statistics."""
         with self.lock:
             success_rate = (self.successful_requests / max(1, self.total_requests)) * 100
@@ -268,17 +267,17 @@ class CircuitBreaker:
         """Manually force circuit breaker open."""
         with self.lock:
             self.state = CircuitState.OPEN
-            self.logger.warning(f"Circuit breaker {self.name} manually forced OPEN")
+            self.logger.log_warning(f"Circuit breaker {self.name} manually forced OPEN")
     
     def force_close(self) -> None:
         """Manually force circuit breaker closed."""
         with self.lock:
             self.state = CircuitState.CLOSED
             self.failure_count = 0
-            self.logger.info(f"Circuit breaker {self.name} manually forced CLOSED")
+            self.logger.log_info(f"Circuit breaker {self.name} manually forced CLOSED")
 
 
-class CircuitBreakerOpenException(Exception):
+class CircuitBreakerOpenException(Exception, component="fault_tolerance"):
     """Exception raised when circuit breaker is open."""
     pass
 
@@ -299,7 +298,7 @@ class RetryManager:
             config: Retry configuration
         """
         self.config = config or RetryConfig()
-        self.logger = logging.getLogger("RetryManager")
+        self.logger = get_unified_logger()
         
         # Statistics
         self.retry_stats = defaultdict(lambda: {
@@ -347,7 +346,7 @@ class RetryManager:
                 if attempt > 0:
                     # Successful retry
                     self.retry_stats[func_name]['successful_retries'] += 1
-                    self.logger.info(f"Function {func_name} succeeded on attempt {attempt + 1}")
+                    self.logger.log_info(f"Function {func_name} succeeded on attempt {attempt + 1}", component="fault_tolerance")
                 
                 return result
                 
@@ -359,7 +358,7 @@ class RetryManager:
                     delay = self._calculate_delay(attempt, config)
                     total_delay += delay
                     
-                    self.logger.warning(f"Function {func_name} failed on attempt {attempt + 1}, "
+                    self.logger.log_warning(f"Function {func_name} failed on attempt {attempt + 1}, "
                                       f"retrying in {delay:.2f}s: {e}")
                     
                     time.sleep(delay)
@@ -368,12 +367,12 @@ class RetryManager:
                     self.retry_stats[func_name]['failed_retries'] += 1
                     self.retry_stats[func_name]['total_delay_time'] += total_delay
                     
-                    self.logger.error(f"Function {func_name} failed after {config.max_attempts} attempts")
+                    self.logger.log_error(f"Function {func_name} failed after {config.max_attempts} attempts")
             
             except Exception as e:
                 # Non-retryable exception
                 last_exception = e
-                self.logger.error(f"Function {func_name} failed with non-retryable exception: {e}")
+                self.logger.log_error(f"Function {func_name} failed with non-retryable exception: {e}", component="fault_tolerance")
                 break
         
         # All attempts failed
@@ -429,7 +428,7 @@ class BulkheadIsolation:
         self.max_concurrent_requests = max_concurrent_requests
         self.queue_size = queue_size
         self.timeout = timeout
-        self.logger = logging.getLogger(f"Bulkhead.{name}")
+        self.logger = get_unified_logger()
         
         # Resource management
         self.semaphore = threading.Semaphore(max_concurrent_requests)
@@ -492,11 +491,11 @@ class BulkheadIsolation:
             with self.stats_lock:
                 self.stats['timeout_requests'] += 1
             
-            self.logger.warning(f"Request to {func.__name__} timed out in bulkhead {self.name}")
+            self.logger.log_warning(f"Request to {func.__name__} timed out in bulkhead {self.name}")
             raise
         
         except Exception as e:
-            self.logger.error(f"Request to {func.__name__} failed in bulkhead {self.name}: {e}")
+            self.logger.log_error(f"Request to {func.__name__} failed in bulkhead {self.name}: {e}", component="fault_tolerance")
             raise
     
     def _execute_with_semaphore(self, func: Callable, *args, **kwargs) -> Any:
@@ -540,7 +539,7 @@ class FaultTolerantSystem:
     
     def __init__(self):
         """Initialize fault tolerant system."""
-        self.logger = logging.getLogger("FaultTolerantSystem")
+        self.logger = get_unified_logger()
         
         # Component registry
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
@@ -570,7 +569,7 @@ class FaultTolerantSystem:
             circuit_breaker = CircuitBreaker(name, config)
             self.circuit_breakers[name] = circuit_breaker
             
-            self.logger.info(f"Created circuit breaker: {name}")
+            self.logger.log_info(f"Created circuit breaker: {name}", component="fault_tolerance")
             return circuit_breaker
     
     def create_bulkhead(self,
@@ -586,7 +585,7 @@ class FaultTolerantSystem:
             bulkhead = BulkheadIsolation(name, max_concurrent_requests, queue_size, timeout)
             self.bulkheads[name] = bulkhead
             
-            self.logger.info(f"Created bulkhead: {name}")
+            self.logger.log_info(f"Created bulkhead: {name}", component="fault_tolerance")
             return bulkhead
     
     def execute_with_protection(self,
@@ -649,10 +648,10 @@ class FaultTolerantSystem:
             # Try fallback if available
             if fallback_func:
                 try:
-                    self.logger.warning(f"Executing fallback for {func_name}: {e}")
+                    self.logger.log_warning(f"Executing fallback for {func_name}: {e}", component="fault_tolerance")
                     return fallback_func(*args, **kwargs)
                 except Exception as fallback_error:
-                    self.logger.error(f"Fallback also failed for {func_name}: {fallback_error}")
+                    self.logger.log_error(f"Fallback also failed for {func_name}: {fallback_error}", component="fault_tolerance")
                     raise e  # Raise original exception
             
             raise  # Re-raise if no fallback
@@ -674,7 +673,7 @@ class FaultTolerantSystem:
             self.fault_stats[fault_type.value] += 1
             self.fault_stats['total'] += 1
         
-        self.logger.warning(f"Fault recorded: {component} - {fault_type.value} - {error}")
+        self.logger.log_warning(f"Fault recorded: {component} - {fault_type.value} - {error}", component="fault_tolerance")
     
     def _classify_fault_type(self, error: Exception) -> FaultType:
         """Classify the type of fault based on the exception."""
@@ -696,7 +695,7 @@ class FaultTolerantSystem:
     def register_healing_callback(self, component: str, callback: Callable) -> None:
         """Register a self-healing callback for a component."""
         self.healing_callbacks[component].append(callback)
-        self.logger.info(f"Registered healing callback for {component}")
+        self.logger.log_info(f"Registered healing callback for {component}", component="fault_tolerance")
     
     def start_self_healing(self, check_interval: float = 60.0) -> None:
         """Start the self-healing monitoring thread."""
@@ -712,7 +711,7 @@ class FaultTolerantSystem:
         )
         self.healing_thread.start()
         
-        self.logger.info("Self-healing system started")
+        self.logger.log_info("Self-healing system started")
     
     def stop_self_healing(self) -> None:
         """Stop the self-healing monitoring thread."""
@@ -721,7 +720,7 @@ class FaultTolerantSystem:
         if self.healing_thread and self.healing_thread.is_alive():
             self.healing_thread.join(timeout=5.0)
         
-        self.logger.info("Self-healing system stopped")
+        self.logger.log_info("Self-healing system stopped", component="fault_tolerance")
     
     def _healing_worker(self, check_interval: float) -> None:
         """Worker thread for self-healing monitoring."""
@@ -730,15 +729,15 @@ class FaultTolerantSystem:
                 self._check_and_heal_components()
                 time.sleep(check_interval)
             except Exception as e:
-                self.logger.error(f"Error in healing worker: {e}")
+                self.logger.log_error(f"Error in healing worker: {e}")
     
-    def _check_and_heal_components(self) -> None:
+    def _check_and_heal_components(self, component="fault_tolerance") -> None:
         """Check component health and trigger healing if needed."""
         # Check circuit breakers
         for name, circuit_breaker in self.circuit_breakers.items():
             if circuit_breaker.get_state() == CircuitState.OPEN:
-                self.logger.info(f"Attempting to heal circuit breaker: {name}")
-                self._trigger_healing_callbacks(name)
+                self.logger.log_info(f"Attempting to heal circuit breaker: {name}")
+                self._trigger_healing_callbacks(name, component="fault_tolerance")
         
         # Check bulkheads for high rejection rates
         for name, bulkhead in self.bulkheads.items():
@@ -746,8 +745,8 @@ class FaultTolerantSystem:
             if stats['total_requests'] > 0:
                 rejection_rate = stats['rejected_requests'] / stats['total_requests']
                 if rejection_rate > 0.1:  # More than 10% rejections
-                    self.logger.info(f"Attempting to heal bulkhead: {name} (rejection_rate: {rejection_rate:.2%})")
-                    self._trigger_healing_callbacks(name)
+                    self.logger.log_info(f"Attempting to heal bulkhead: {name} (rejection_rate: {rejection_rate:.2%})")
+                    self._trigger_healing_callbacks(name, component="fault_tolerance")
     
     def _trigger_healing_callbacks(self, component: str) -> None:
         """Trigger healing callbacks for a component."""
@@ -756,11 +755,11 @@ class FaultTolerantSystem:
         for callback in callbacks:
             try:
                 callback()
-                self.logger.info(f"Healing callback executed for {component}")
+                self.logger.log_info(f"Healing callback executed for {component}")
             except Exception as e:
-                self.logger.error(f"Healing callback failed for {component}: {e}")
+                self.logger.log_error(f"Healing callback failed for {component}: {e}")
     
-    def get_system_health(self) -> Dict[str, Any]:
+    def get_system_health(self, component="fault_tolerance") -> Dict[str, Any]:
         """Get overall system health status."""
         with self.system_lock:
             # Circuit breaker health
@@ -816,7 +815,7 @@ class FaultTolerantSystem:
         for bulkhead in self.bulkheads.values():
             bulkhead.shutdown()
         
-        self.logger.info("Fault tolerant system shutdown complete")
+        self.logger.log_info("Fault tolerant system shutdown complete", component="fault_tolerance")
 
 
 # Decorators for easy fault tolerance integration

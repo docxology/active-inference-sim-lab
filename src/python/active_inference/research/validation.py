@@ -8,13 +8,14 @@ and produces theoretically expected behaviors.
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable
 from dataclasses import dataclass
-import logging
 from abc import ABC, abstractmethod
+
+from ..utils.logging_config import get_unified_logger
 
 from ..core.agent import ActiveInferenceAgent
 from ..core.beliefs import BeliefState
 from ..core.generative_model import GenerativeModel
-from ..utils.validation import ValidationError
+from ..utils.advanced_validation import ValidationError
 
 
 @dataclass
@@ -38,7 +39,7 @@ class TheoreticalValidator:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("TheoreticalValidator")
+        self.logger = get_unified_logger()
         self.results: List[ValidationResult] = []
     
     def validate_free_energy_principle(self, 
@@ -124,7 +125,7 @@ class TheoreticalValidator:
             return result
             
         except Exception as e:
-            self.logger.error(f"Free energy validation failed: {e}")
+            self.logger.log_error(f"Free energy validation failed: {e}", component="validation")
             return ValidationResult(
                 test_name="free_energy_principle",
                 passed=False,
@@ -140,7 +141,7 @@ class FreeEnergyValidator:
     """Validates free energy computation properties."""
     
     def __init__(self):
-        self.logger = logging.getLogger("FreeEnergyValidator")
+        self.logger = get_unified_logger()
     
     def validate_free_energy_bounds(self, 
                                    agent: ActiveInferenceAgent,
@@ -219,7 +220,7 @@ class ConvergenceValidator:
     """Validates convergence properties of belief updating."""
     
     def __init__(self):
-        self.logger = logging.getLogger("ConvergenceValidator")
+        self.logger = get_unified_logger()
     
     def validate_belief_convergence(self,
                                    agent: ActiveInferenceAgent,
@@ -310,7 +311,7 @@ class BehaviorValidator:
     """Validates emergent behaviors expected from Active Inference."""
     
     def __init__(self):
-        self.logger = logging.getLogger("BehaviorValidator")
+        self.logger = get_unified_logger()
     
     def validate_exploration_exploitation(self,
                                         agent: ActiveInferenceAgent,
@@ -435,11 +436,11 @@ class BehaviorValidator:
                     result = validator(agent, environment)
                 results[name] = result
                 
-                self.logger.info(f"Validation {name}: {'PASS' if result.passed else 'FAIL'} "
+                self.logger.log_info(f"Validation {name}: {'PASS' if result.passed else 'FAIL'} "
                                f"(score: {result.score:.3f})")
                 
             except Exception as e:
-                self.logger.error(f"Validation {name} failed: {e}")
+                self.logger.log_error(f"Validation {name} failed: {e}", component="validation")
                 results[name] = ValidationResult(
                     test_name=name,
                     passed=False,

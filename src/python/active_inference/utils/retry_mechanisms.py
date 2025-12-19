@@ -5,7 +5,6 @@ Generation 2: MAKE IT ROBUST - Resilient Operation Patterns
 
 import time
 import random
-import logging
 import threading
 from typing import Dict, Any, Optional, List, Callable, TypeVar, Union, Type
 from enum import Enum
@@ -14,7 +13,7 @@ from functools import wraps
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 T = TypeVar('T')
 
@@ -129,24 +128,16 @@ class RetryMechanism:
                 
                 # Check if we should retry this exception
                 if not self._should_retry_exception(e):
-                    logger.debug(f"Not retrying exception: {e}")
-                    raise
-                
-                # Check if we have more attempts
-                if attempt >= self.config.max_attempts:
-                    break
-                
-                # Calculate and apply delay
-                delay = self._calculate_delay(attempt)
+                    self.logger.log_debug("Operation completed", component="retry_mechanisms")
                 
                 # Call retry callback if provided
                 if self.config.on_retry:
                     try:
                         self.config.on_retry(attempt, e, delay)
                     except Exception as callback_error:
-                        logger.error(f"Retry callback failed: {callback_error}")
+                        self.logger.log_debug("Operation completed", component="retry_mechanisms")
                 
-                logger.warning(f"Attempt {attempt} failed, retrying in {delay:.2f}s: {e}")
+                logger.log_warning(f"Attempt {attempt} failed, retrying in {delay:.2f}s: {e}")
                 time.sleep(delay)
         
         # All attempts failed
@@ -160,7 +151,7 @@ class RetryMechanism:
             try:
                 self.config.on_final_failure(last_exception, attempt)
             except Exception as callback_error:
-                logger.error(f"Final failure callback failed: {callback_error}")
+                self.logger.log_debug("Operation completed", component="retry_mechanisms")
         
         error_msg = f"All {self.config.max_attempts} retry attempts failed"
         raise RetryExhaustedError(error_msg, attempt, last_exception)
@@ -211,24 +202,16 @@ class RetryMechanism:
                 
                 # Check if we should retry this exception
                 if not self._should_retry_exception(e):
-                    logger.debug(f"Not retrying exception: {e}")
-                    raise
-                
-                # Check if we have more attempts
-                if attempt >= self.config.max_attempts:
-                    break
-                
-                # Calculate and apply delay
-                delay = self._calculate_delay(attempt)
+                    self.logger.log_debug("Operation completed", component="retry_mechanisms")
                 
                 # Call retry callback if provided
                 if self.config.on_retry:
                     try:
                         self.config.on_retry(attempt, e, delay)
                     except Exception as callback_error:
-                        logger.error(f"Retry callback failed: {callback_error}")
+                        self.logger.log_debug("Operation completed", component="retry_mechanisms")
                 
-                logger.warning(f"Attempt {attempt} failed, retrying in {delay:.2f}s: {e}")
+                logger.log_warning(f"Attempt {attempt} failed, retrying in {delay:.2f}s: {e}")
                 await asyncio.sleep(delay)
         
         # All attempts failed
@@ -242,7 +225,7 @@ class RetryMechanism:
             try:
                 self.config.on_final_failure(last_exception, attempt)
             except Exception as callback_error:
-                logger.error(f"Final failure callback failed: {callback_error}")
+                self.logger.log_debug("Operation completed", component="retry_mechanisms")
         
         error_msg = f"All {self.config.max_attempts} retry attempts failed"
         raise RetryExhaustedError(error_msg, attempt, last_exception)
@@ -432,7 +415,7 @@ class GlobalRetryRegistry:
         """Register a retry mechanism."""
         with self._lock:
             self._mechanisms[name] = mechanism
-        logger.info(f"Retry mechanism registered: {name}")
+        self.logger.log_debug("Operation completed", component="retry_mechanisms")
     
     def get(self, name: str) -> Optional[RetryMechanism]:
         """Get retry mechanism by name."""
@@ -487,11 +470,7 @@ class GlobalRetryRegistry:
         with self._lock:
             for mechanism in self._mechanisms.values():
                 mechanism.reset_statistics()
-        logger.info("All retry mechanism statistics reset")
-
-
-# Global retry registry instance
-retry_registry = GlobalRetryRegistry()
+        self.logger.log_debug("Operation completed", component="retry_mechanisms")
 
 
 def smart_retry(name: str, 

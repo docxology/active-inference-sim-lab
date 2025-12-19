@@ -47,7 +47,7 @@ try:
         EmergentBehaviorDiscoveryBenchmark
     )
     from active_inference.research.experiments import ExperimentFramework
-    from active_inference.utils.logging import setup_logging
+    from active_inference.utils.logging_config import setup_logging
 except ImportError as e:
     print(f"Import warning: {e}")
     print("Some advanced features may not be available.")

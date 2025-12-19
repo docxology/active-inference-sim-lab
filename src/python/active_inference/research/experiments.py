@@ -9,11 +9,12 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
 import itertools
-import logging
 import json
 import time
 from pathlib import Path
 from abc import ABC, abstractmethod
+
+from ..utils.logging_config import get_unified_logger
 
 from ..core.agent import ActiveInferenceAgent
 from .benchmarks import BenchmarkResult
@@ -58,7 +59,7 @@ class ExperimentFramework:
     def __init__(self, output_dir: str = "experiments"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
-        self.logger = logging.getLogger("ExperimentFramework")
+        self.logger = get_unified_logger()
         
         # Experiment tracking
         self.experiments: List[ExperimentResult] = []
@@ -81,14 +82,14 @@ class ExperimentFramework:
         """
         start_time = time.time()
         
-        self.logger.info(f"Starting experiment: {config.name}")
-        self.logger.info(f"Configuration: {config.parameters}")
+        self.logger.log_info(f"Starting experiment: {config.name}", component="experiments")
+        self.logger.log_info(f"Configuration: {config.parameters}", component="experiments")
         
         run_results = []
         
         try:
             for run in range(config.n_runs):
-                self.logger.info(f"Run {run + 1}/{config.n_runs}")
+                self.logger.log_info(f"Run {run + 1}/{config.n_runs}", component="experiments")
                 
                 # Create fresh instances for each run
                 agent = agent_factory(config.agent_config)
@@ -102,7 +103,7 @@ class ExperimentFramework:
                 
                 # Log progress
                 if 'final_performance' in run_result:
-                    self.logger.info(f"Run {run + 1} final performance: "
+                    self.logger.log_info(f"Run {run + 1} final performance: ", component="experiments")
                                    f"{run_result['final_performance']:.3f}")
             
             # Aggregate statistics
@@ -132,14 +133,14 @@ class ExperimentFramework:
             # Save results
             self._save_experiment_result(result)
             
-            self.logger.info(f"Experiment {config.name} completed in {execution_time:.1f}s")
-            self.logger.info(f"Average performance: {aggregate_stats.get('mean_final_performance', 0):.3f} "
+            self.logger.log_info(f"Experiment {config.name} completed in {execution_time:.1f}s", component="experiments")
+            self.logger.log_info(f"Average performance: {aggregate_stats.get('mean_final_performance', 0):.3f} ", component="experiments")
                            f"± {aggregate_stats.get('std_final_performance', 0):.3f}")
             
             return result
             
         except Exception as e:
-            self.logger.error(f"Experiment {config.name} failed: {e}")
+            self.logger.log_error(f"Experiment {config.name} failed: {e}", component="experiments")
             raise
     
     def _run_single_experiment(self,
@@ -355,7 +356,7 @@ class ExperimentFramework:
         with open(exp_dir / "runs.json", 'w') as f:
             json.dump(run_data, f, indent=2, default=str)
         
-        self.logger.info(f"Experiment results saved to {exp_dir}")
+        self.logger.log_info(f"Experiment results saved to {exp_dir}", component="experiments")
 
 
 class ControlledExperiment:
@@ -363,7 +364,7 @@ class ControlledExperiment:
     
     def __init__(self, framework: ExperimentFramework):
         self.framework = framework
-        self.logger = logging.getLogger("ControlledExperiment")
+        self.logger = get_unified_logger()
     
     def compare_conditions(self,
                           base_config: ExperimentConfig,
@@ -386,7 +387,7 @@ class ControlledExperiment:
         results = {}
         
         for condition_name, parameter_overrides in conditions.items():
-            self.logger.info(f"Running condition: {condition_name}")
+            self.logger.log_info(f"Running condition: {condition_name}", component="experiments")
             
             # Create modified config for this condition
             condition_config = ExperimentConfig(
@@ -415,7 +416,7 @@ class ControlledExperiment:
     def _compare_results(self, results: Dict[str, ExperimentResult]):
         """Compare results across conditions."""
         
-        self.logger.info("=== EXPERIMENTAL COMPARISON ===")
+        self.logger.log_info("=== EXPERIMENTAL COMPARISON ===", component="experiments")
         
         for condition_name, result in results.items():
             mean_perf = result.aggregate_stats['mean_final_performance']
@@ -424,7 +425,7 @@ class ControlledExperiment:
             
             significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else ""
             
-            self.logger.info(f"{condition_name}: {mean_perf:.3f} ± {std_perf:.3f} {significance}")
+            self.logger.log_info(f"{condition_name}: {mean_perf:.3f} ± {std_perf:.3f} {significance}", component="experiments")
         
         # Statistical comparison between conditions
         condition_names = list(results.keys())
@@ -452,7 +453,7 @@ class ControlledExperiment:
                 
                 significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else "ns"
                 
-                self.logger.info(f"{cond1} vs {cond2}: d={cohens_d:.3f}, p={p_value:.3f} {significance}")
+                self.logger.log_info(f"{cond1} vs {cond2}: d={cohens_d:.3f}, p={p_value:.3f} {significance}", component="experiments")
 
 
 class AblationStudy:
@@ -460,7 +461,7 @@ class AblationStudy:
     
     def __init__(self, framework: ExperimentFramework):
         self.framework = framework
-        self.logger = logging.getLogger("AblationStudy")
+        self.logger = get_unified_logger()
     
     def run_ablation(self,
                     base_config: ExperimentConfig,
@@ -490,7 +491,7 @@ class AblationStudy:
         
         # Individual component ablations
         for component_name, disabled_value in components_to_ablate.items():
-            self.logger.info(f"Ablating component: {component_name}")
+            self.logger.log_info(f"Ablating component: {component_name}", component="experiments")
             
             ablation_config = ExperimentConfig(
                 name=f"{base_config.name}_ablate_{component_name}",
@@ -519,8 +520,8 @@ class AblationStudy:
         
         baseline_perf = results['baseline'].aggregate_stats['mean_final_performance']
         
-        self.logger.info("=== ABLATION ANALYSIS ===")
-        self.logger.info(f"Baseline performance: {baseline_perf:.3f}")
+        self.logger.log_info("=== ABLATION ANALYSIS ===", component="experiments")
+        self.logger.log_info(f"Baseline performance: {baseline_perf:.3f}", component="experiments")
         
         for condition_name, result in results.items():
             if condition_name == 'baseline':
@@ -532,7 +533,7 @@ class AblationStudy:
             
             component_name = condition_name.replace('ablate_', '')
             
-            self.logger.info(f"{component_name}: {ablated_perf:.3f} "
+            self.logger.log_info(f"{component_name}: {ablated_perf:.3f} ", component="experiments")
                            f"(drop: {performance_drop:.3f}, {relative_drop:.1f}%)")
 
 
@@ -541,7 +542,7 @@ class ParameterSweep:
     
     def __init__(self, framework: ExperimentFramework):
         self.framework = framework
-        self.logger = logging.getLogger("ParameterSweep")
+        self.logger = get_unified_logger()
     
     def grid_search(self,
                    base_config: ExperimentConfig,
@@ -571,7 +572,7 @@ class ParameterSweep:
         
         # Limit combinations if too many
         if len(all_combinations) > max_combinations:
-            self.logger.warning(f"Too many combinations ({len(all_combinations)}), "
+            self.logger.log_warning(f"Too many combinations ({len(all_combinations)}), ", component="experiments")
                               f"randomly sampling {max_combinations}")
             np.random.shuffle(all_combinations)
             all_combinations = all_combinations[:max_combinations]
@@ -585,7 +586,7 @@ class ParameterSweep:
             params = dict(zip(param_names, param_combination))
             param_str = "_".join([f"{k}={v}" for k, v in params.items()])
             
-            self.logger.info(f"Testing combination {i+1}/{len(all_combinations)}: {params}")
+            self.logger.log_info(f"Testing combination {i+1}/{len(all_combinations)}: {params}", component="experiments")
             
             # Create config for this combination
             sweep_config = ExperimentConfig(
@@ -613,7 +614,7 @@ class ParameterSweep:
                     best_params = params
                 
             except Exception as e:
-                self.logger.error(f"Parameter combination {params} failed: {e}")
+                self.logger.log_error(f"Parameter combination {params} failed: {e}", component="experiments")
                 continue
         
         # Report results
@@ -625,16 +626,16 @@ class ParameterSweep:
                             best_params: Dict, best_performance: float):
         """Report parameter sweep results."""
         
-        self.logger.info("=== PARAMETER SWEEP RESULTS ===")
-        self.logger.info(f"Best parameters: {best_params}")
-        self.logger.info(f"Best performance: {best_performance:.3f}")
+        self.logger.log_info("=== PARAMETER SWEEP RESULTS ===", component="experiments")
+        self.logger.log_info(f"Best parameters: {best_params}", component="experiments")
+        self.logger.log_info(f"Best performance: {best_performance:.3f}", component="experiments")
         
         # Show top 5 performers
         sorted_results = sorted(results.items(), 
                               key=lambda x: x[1].aggregate_stats['mean_final_performance'], 
                               reverse=True)
         
-        self.logger.info("Top 5 parameter combinations:")
+        self.logger.log_info("Top 5 parameter combinations:", component="experiments")
         for i, (param_str, result) in enumerate(sorted_results[:5]):
             perf = result.aggregate_stats['mean_final_performance']
-            self.logger.info(f"{i+1}. {param_str}: {perf:.3f}")
+            self.logger.log_info(f"{i+1}. {param_str}: {perf:.3f}", component="experiments")

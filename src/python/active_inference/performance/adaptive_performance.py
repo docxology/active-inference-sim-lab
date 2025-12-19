@@ -4,7 +4,6 @@ Generation 3: MAKE IT SCALE - Self-Optimizing Performance Engine
 """
 
 import time
-import logging
 import threading
 import psutil
 import numpy as np
@@ -17,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import asyncio
 import gc
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 class OptimizationMode(Enum):

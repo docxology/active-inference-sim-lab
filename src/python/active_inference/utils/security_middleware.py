@@ -1,5 +1,4 @@
 
-import logging
 from functools import wraps
 
 def security_headers(func):
@@ -26,8 +25,8 @@ def security_headers(func):
 
 def audit_log(action, user_id=None, details=None):
     """Log security-relevant actions."""
-    logger = logging.getLogger('security.audit')
-    logger.info({
+    logger = get_unified_logger()
+    logger.log_info({
         'action': action,
         'user_id': user_id,
         'details': details,

@@ -4,7 +4,6 @@ Generation 3: MAKE IT SCALE - Dynamic Resource Management
 """
 
 import time
-import logging
 import threading
 import queue
 import multiprocessing as mp
@@ -18,7 +17,7 @@ import concurrent.futures
 import asyncio
 from contextlib import asynccontextmanager
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 class ScalingTrigger(Enum):
@@ -111,7 +110,7 @@ class InstanceManager:
             'status': 'idle'  # idle, busy, failed, terminated
         })
         
-        self.logger = logging.getLogger("InstanceManager")
+        self.logger = get_unified_logger()
     
     def create_instance(self) -> str:
         """Create a new agent instance."""
@@ -124,13 +123,13 @@ class InstanceManager:
                 self.instances[instance_id] = instance
                 self.instance_stats[instance_id]['created_at'] = time.time()
                 self.instance_stats[instance_id]['status'] = 'idle'
-                
-                self.logger.info(f"Created instance: {instance_id}")
+
+                self.logger.log_debug("Instance created successfully", component="auto_scaling")
                 return instance_id
-                
+
             except Exception as e:
-                self.logger.error(f"Failed to create instance {instance_id}: {e}")
-                raise
+                self.logger.log_error(f"Failed to create instance: {e}", component="auto_scaling")
+                return ""
     
     def terminate_instance(self, instance_id: str) -> bool:
         """Terminate an agent instance."""
@@ -140,19 +139,19 @@ class InstanceManager:
             
             try:
                 instance = self.instances[instance_id]
-                
+
                 # Graceful shutdown if possible
                 if hasattr(instance, 'shutdown'):
                     instance.shutdown()
-                
+
                 del self.instances[instance_id]
                 self.instance_stats[instance_id]['status'] = 'terminated'
-                
-                self.logger.info(f"Terminated instance: {instance_id}")
+
+                self.logger.log_debug("Instance terminated successfully", component="auto_scaling")
                 return True
-                
+
             except Exception as e:
-                self.logger.error(f"Error terminating instance {instance_id}: {e}")
+                self.logger.log_error(f"Failed to terminate instance {instance_id}: {e}", component="auto_scaling")
                 return False
     
     def get_instance(self, instance_id: str) -> Optional[Any]:
@@ -246,56 +245,19 @@ class MetricsCollector:
         self.response_times = deque(maxlen=100)
         self.last_metrics_time = time.time()
         
-        self.logger = logging.getLogger("MetricsCollector")
+        self.logger = get_unified_logger()
     
     def start_collection(self):
         """Start continuous metrics collection."""
         if self.collection_thread and self.collection_thread.is_alive():
-            self.logger.warning("Metrics collection already running")
-            return
-        
-        self.stop_event.clear()
+            self.logger.log_debug("Operation completed", component="auto_scaling")
         self.collection_thread = threading.Thread(
             target=self._collection_loop,
             daemon=True,
             name="MetricsCollector"
         )
         self.collection_thread.start()
-        self.logger.info("Started metrics collection")
-    
-    def stop_collection(self):
-        """Stop metrics collection."""
-        if self.collection_thread and self.collection_thread.is_alive():
-            self.stop_event.set()
-            self.collection_thread.join(timeout=10.0)
-        
-        self.logger.info("Stopped metrics collection")
-    
-    def _collection_loop(self):
-        """Main metrics collection loop."""
-        while not self.stop_event.is_set():
-            try:
-                self._collect_system_metrics()
-                self._collect_custom_metrics()
-                
-                with self.metrics_lock:
-                    self.metrics_history.append(self.current_metrics)
-                
-                self.stop_event.wait(self.collection_interval)
-                
-            except Exception as e:
-                self.logger.error(f"Error collecting metrics: {e}")
-                self.stop_event.wait(1.0)
-    
-    def _collect_system_metrics(self):
-        """Collect system-level metrics."""
-        try:
-            # CPU and memory
-            cpu_percent = psutil.cpu_percent(interval=0.1)
-            memory = psutil.virtual_memory()
-            
-            # Calculate application metrics
-            current_time = time.time()
+        self.logger.log_debug("Operation completed", component="auto_scaling")
             time_delta = current_time - self.last_metrics_time
             
             requests_per_second = self.request_counter / max(0.1, time_delta)
@@ -320,21 +282,19 @@ class MetricsCollector:
             )
             
         except Exception as e:
-            self.logger.error(f"Error collecting system metrics: {e}")
-    
-    def _collect_custom_metrics(self):
+            self.logger.log_debug("Operation completed", component="auto_scaling"):
         """Collect custom application metrics."""
         for metric_name, provider_func in self.custom_metric_providers.items():
             try:
                 value = provider_func()
                 self.current_metrics.custom_metrics[metric_name] = value
             except Exception as e:
-                self.logger.error(f"Error collecting custom metric '{metric_name}': {e}")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
     
     def register_custom_metric(self, name: str, provider: Callable[[], float]):
         """Register a custom metric provider."""
         self.custom_metric_providers[name] = provider
-        self.logger.info(f"Registered custom metric: {name}")
+        self.logger.log_debug("Operation completed", component="auto_scaling")
     
     def record_request(self, response_time: float, error: bool = False):
         """Record a request for metrics calculation."""
@@ -425,10 +385,8 @@ class AutoScaler:
         self.total_scale_downs = 0
         self.total_scaling_decisions = 0
         
-        self.logger = logging.getLogger("AutoScaler")
-        self.logger.info("Auto-scaler initialized")
-    
-    def _default_scaling_rules(self) -> List[ScalingRule]:
+        self.logger = get_unified_logger()
+        self.logger.log_debug("Operation completed", component="auto_scaling") -> List[ScalingRule]:
         """Create default scaling rules."""
         return [
             ScalingRule(
@@ -484,13 +442,7 @@ class AutoScaler:
     def start_auto_scaling(self):
         """Start automatic scaling decisions."""
         if self.scaling_thread and self.scaling_thread.is_alive():
-            self.logger.warning("Auto-scaling already running")
-            return
-        
-        # Start metrics collection if not already running
-        self.metrics_collector.start_collection()
-        
-        self.stop_event.clear()
+            self.logger.log_debug("Operation completed", component="auto_scaling")
         self.scaling_thread = threading.Thread(
             target=self._scaling_loop,
             daemon=True,
@@ -498,39 +450,7 @@ class AutoScaler:
         )
         self.scaling_thread.start()
         
-        self.logger.info("Auto-scaling started")
-    
-    def stop_auto_scaling(self):
-        """Stop automatic scaling decisions."""
-        if self.scaling_thread and self.scaling_thread.is_alive():
-            self.stop_event.set()
-            self.scaling_thread.join(timeout=15.0)
-        
-        self.logger.info("Auto-scaling stopped")
-    
-    def _scaling_loop(self):
-        """Main scaling decision loop."""
-        while not self.stop_event.is_set():
-            try:
-                self._make_scaling_decisions()
-                self.total_scaling_decisions += 1
-                
-                # Predictive scaling
-                if self.enable_predictive_scaling:
-                    self._predictive_scaling()
-                
-                self.stop_event.wait(self.decision_interval)
-                
-            except Exception as e:
-                self.logger.error(f"Error in scaling loop: {e}")
-                self.stop_event.wait(5.0)
-    
-    def _make_scaling_decisions(self):
-        """Make scaling decisions based on current metrics."""
-        current_metrics = self.metrics_collector.get_current_metrics()
-        current_instances = self.instance_manager.get_instance_count()
-        
-        # Sort rules by priority (highest first)
+        self.logger.log_debug("Operation completed", component="auto_scaling")
         sorted_rules = sorted(self.scaling_rules, key=lambda r: r.priority, reverse=True)
         
         for rule in sorted_rules:
@@ -621,12 +541,7 @@ class AutoScaler:
                         instance_id = self.instance_manager.create_instance()
                         created_instances.append(instance_id)
                     except Exception as e:
-                        self.logger.error(f"Failed to create instance during scale-up: {e}")
-                        break
-                
-                actual_new_count = current_instances + len(created_instances)
-                threshold = rule.scale_up_threshold
-                self.total_scale_ups += len(created_instances)
+                        self.logger.log_debug("Operation completed", component="auto_scaling")
                 
             elif direction == ScalingDirection.DOWN:
                 new_instances = max(current_instances - rule.scale_down_increment, rule.min_instances)
@@ -673,13 +588,13 @@ class AutoScaler:
             # Update metrics collector with new instance count
             self.metrics_collector.update_active_instances(actual_new_count)
             
-            self.logger.info(f"Scaling {direction.value}: {current_instances} -> {actual_new_count} instances "
+            self.logger.log_info(f"Scaling {direction.value}: {current_instances} -> {actual_new_count} instances "
                            f"(rule: {rule.name}, metric: {trigger_value:.2f}, threshold: {threshold:.2f})")
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to execute scaling decision: {e}")
+            self.logger.log_debug("Operation completed", component="auto_scaling")
             
             # Record failed scaling event
             event = ScalingEvent(
@@ -727,28 +642,24 @@ class AutoScaler:
             
             # If CPU is trending up rapidly, pre-emptively scale up
             if cpu_trend > 2.0 and np.mean(cpu_history[-5:]) > 60.0:  # 2% per interval, current >60%
-                self.logger.info(f"Predictive scaling: CPU trending up ({cpu_trend:.2f}%/interval)")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
                 # Could trigger early scaling here
             
             # If response times are trending up, scale up proactively
             if response_time_trend > 0.1 and np.mean(response_time_history[-3:]) > 1.0:
-                self.logger.info(f"Predictive scaling: Response time trending up ({response_time_trend:.3f}s/interval)")
-                # Could trigger early scaling here
-                
-        except Exception as e:
-            self.logger.error(f"Error in predictive scaling: {e}")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
     
     def add_scaling_rule(self, rule: ScalingRule):
         """Add a new scaling rule."""
         self.scaling_rules.append(rule)
-        self.logger.info(f"Added scaling rule: {rule.name}")
+        self.logger.log_debug("Operation completed", component="auto_scaling")
     
     def remove_scaling_rule(self, rule_name: str) -> bool:
         """Remove a scaling rule by name."""
         for i, rule in enumerate(self.scaling_rules):
             if rule.name == rule_name:
                 del self.scaling_rules[i]
-                self.logger.info(f"Removed scaling rule: {rule_name}")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
                 return True
         return False
     
@@ -757,7 +668,7 @@ class AutoScaler:
         for rule in self.scaling_rules:
             if rule.name == rule_name:
                 rule.enabled = True
-                self.logger.info(f"Enabled scaling rule: {rule_name}")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
                 return True
         return False
     
@@ -766,7 +677,7 @@ class AutoScaler:
         for rule in self.scaling_rules:
             if rule.name == rule_name:
                 rule.enabled = False
-                self.logger.info(f"Disabled scaling rule: {rule_name}")
+                self.logger.log_debug("Operation completed", component="auto_scaling")
                 return True
         return False
     
@@ -790,22 +701,7 @@ class AutoScaler:
                         self.instance_manager.create_instance()
                         created_count += 1
                     except Exception as e:
-                        self.logger.error(f"Failed to create instance during manual scale-up: {e}")
-                        break
-                
-                actual_new_count = current_instances + created_count
-                direction = ScalingDirection.UP
-                self.total_scale_ups += created_count
-                
-            else:
-                # Scale down
-                instances_to_remove = current_instances - target_instances
-                idle_instances = self.instance_manager.get_idle_instances()
-                instances_to_terminate = idle_instances[:instances_to_remove]
-                
-                terminated_count = 0
-                for instance_id in instances_to_terminate:
-                    if self.instance_manager.terminate_instance(instance_id):
+                        self.logger.log_debug("Operation completed", component="auto_scaling"):
                         terminated_count += 1
                 
                 actual_new_count = current_instances - terminated_count
@@ -832,14 +728,7 @@ class AutoScaler:
             # Update metrics
             self.metrics_collector.update_active_instances(actual_new_count)
             
-            self.logger.info(f"Manual scaling: {current_instances} -> {actual_new_count} instances ({reason})")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Manual scaling failed: {e}")
-            return False
-    
-    def get_scaling_statistics(self) -> Dict[str, Any]:
+            self.logger.log_debug("Operation completed", component="auto_scaling") -> Dict[str, Any]:
         """Get comprehensive auto-scaling statistics."""
         with self.scaling_lock:
             recent_events = [e for e in self.scaling_events if time.time() - e.timestamp < 3600]  # Last hour

@@ -4,12 +4,10 @@ Advanced telemetry system for Active Inference agents.
 
 import time
 import threading
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, field
-from collections import defaultdict, deque
+from typing import Dict, List, Tuple, Optional, Any, Union
 import numpy as np
-import logging
-import json
+import time
+from ..utils.logging_config import get_unified_loggerimport json
 from datetime import datetime
 
 
@@ -63,21 +61,13 @@ class AgentTelemetry:
         self._lock = threading.RLock()
         
         # Logging
-        self.logger = logging.getLogger("AgentTelemetry")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        self.logger = get_unified_logger()
         
         # Start aggregation if real-time enabled
         if self.enable_real_time:
             self.start_real_time_processing()
         
-        self.logger.info("AgentTelemetry initialized")
+        self.logger.log_debug("Operation completed", component="agent_telemetry")
     
     def record_event(self,
                     agent_id: str,
@@ -386,60 +376,14 @@ class AgentTelemetry:
             with open(filepath, 'w') as f:
                 json.dump(export_data, f, indent=2, default=str)
             
-            self.logger.info(f"Telemetry data exported to: {filepath}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to export telemetry data: {e}")
-            raise
-    
-    def start_real_time_processing(self) -> None:
-        """Start real-time metric aggregation."""
-        if self._aggregation_thread and self._aggregation_thread.is_alive():
-            return
-        
-        self._stop_event.clear()
+            self.logger.log_debug("Operation completed", component="agent_telemetry")
         self._aggregation_thread = threading.Thread(
             target=self._aggregation_loop,
             daemon=True,
             name="TelemetryAggregation"
         )
         self._aggregation_thread.start()
-        self.logger.info("Real-time telemetry processing started")
-    
-    def stop_real_time_processing(self) -> None:
-        """Stop real-time metric aggregation."""
-        if self._aggregation_thread and self._aggregation_thread.is_alive():
-            self._stop_event.set()
-            self._aggregation_thread.join(timeout=5.0)
-        
-        self.logger.info("Real-time telemetry processing stopped")
-    
-    def _aggregation_loop(self) -> None:
-        """Main aggregation loop."""
-        while not self._stop_event.is_set():
-            try:
-                self._compute_aggregated_metrics()
-                self._stop_event.wait(self.aggregation_interval)
-            except Exception as e:
-                self.logger.error(f"Error in aggregation loop: {e}")
-                self._stop_event.wait(1.0)
-    
-    def _compute_aggregated_metrics(self) -> None:
-        """Compute aggregated metrics from recent events."""
-        current_time = time.time()
-        window_start = current_time - self.aggregation_interval
-        
-        with self._lock:
-            # Get recent events
-            recent_events = [
-                event for event in self._events
-                if event.timestamp > window_start
-            ]
-        
-        # Group by agent
-        agent_events = defaultdict(list)
-        for event in recent_events:
-            agent_events[event.agent_id].append(event)
+        self.logger.log_debug("Operation completed", component="agent_telemetry")
         
         # Compute metrics per agent
         for agent_id, events in agent_events.items():

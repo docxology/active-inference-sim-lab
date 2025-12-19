@@ -21,7 +21,7 @@ from active_inference import (
     ActiveInferenceGridWorld,
     SocialDilemmaEnvironment
 )
-from active_inference.utils.logging import setup_logging
+from active_inference.utils.logging_config import setup_logging
 
 
 def demo_basic_agent():

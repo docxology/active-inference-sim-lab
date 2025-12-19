@@ -12,11 +12,12 @@ agents that can learn continuously without catastrophic forgetting, including:
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
-import logging
 import time
 import json
 from collections import deque, defaultdict
 import pickle
+
+from ..utils.logging_config import get_unified_logger
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -73,7 +74,7 @@ class ElasticWeightConsolidationAI:
         self.base_agent = base_agent
         self.ewc_lambda = ewc_lambda
         self.fisher_estimation_samples = fisher_estimation_samples
-        self.logger = logging.getLogger("EWC-AI")
+        self.logger = get_unified_logger()
         
         # EWC components
         self.task_memories: Dict[str, TaskMemory] = {}
@@ -135,7 +136,7 @@ class ElasticWeightConsolidationAI:
         
         initialization_time = time.time() - start_time
         
-        self.logger.info(f"Started new task: {task_id} (previous: {previous_task})")
+        self.logger.log_info(f"Started new task: {task_id} (previous: {previous_task})", component="continual_learning")
         
         return {
             'task_id': task_id,
@@ -203,7 +204,7 @@ class ElasticWeightConsolidationAI:
             params['beliefs'] = belief_params
             
         except Exception as e:
-            self.logger.warning(f"Failed to extract some model parameters: {e}")
+            self.logger.log_warning(f"Failed to extract some model parameters: {e}", component="continual_learning")
         
         return params
     
@@ -248,7 +249,7 @@ class ElasticWeightConsolidationAI:
                     fisher_info[param_name] = np.var(variations)
             
         except Exception as e:
-            self.logger.warning(f"Fisher information estimation failed: {e}")
+            self.logger.log_warning(f"Fisher information estimation failed: {e}", component="continual_learning")
         
         return fisher_info
     
@@ -280,7 +281,7 @@ class ElasticWeightConsolidationAI:
             return sensitivity
             
         except Exception as e:
-            self.logger.debug(f"Sensitivity computation failed for {param_name}: {e}")
+            self.logger.log_debug(f"Sensitivity computation failed for {param_name}: {e}", component="continual_learning")
             return 0.0
     
     def _compute_importance_weights(self, task_memory: TaskMemory, 
@@ -333,7 +334,7 @@ class ElasticWeightConsolidationAI:
             self.base_agent.update_model(observation, action, reward)
             update_success = True
         except Exception as e:
-            self.logger.error(f"Model update failed: {e}")
+            self.logger.log_error(f"Model update failed: {e}", component="continual_learning")
             update_success = False
         
         # Apply EWC constraint (simplified)
@@ -402,7 +403,7 @@ class ElasticWeightConsolidationAI:
         self.base_agent.learning_rate = constrained_lr
         
         # Log constraint application
-        self.logger.debug(f"Applied EWC constraint: penalty={ewc_penalty:.3f}, "
+        self.logger.log_debug(f"Applied EWC constraint: penalty={ewc_penalty:.3f}, ", component="continual_learning")
                          f"lr_reduction={original_lr - constrained_lr:.3f}")
     
     def _evaluate_catastrophic_forgetting(self) -> float:
@@ -439,7 +440,7 @@ class ElasticWeightConsolidationAI:
                     forgetting_scores.append(forgetting)
                     
                 except Exception as e:
-                    self.logger.debug(f"Forgetting evaluation failed for task {task_id}: {e}")
+                    self.logger.log_debug(f"Forgetting evaluation failed for task {task_id}: {e}", component="continual_learning")
         
         return np.mean(forgetting_scores) if forgetting_scores else 0.0
     
@@ -515,7 +516,7 @@ class MemoryAugmentedActiveInference:
         self.memory_size = memory_size
         self.replay_batch_size = replay_batch_size
         self.replay_frequency = replay_frequency
-        self.logger = logging.getLogger("MemoryAugmentedAI")
+        self.logger = get_unified_logger()
         
         # Episodic memory
         self.episodic_memory: deque = deque(maxlen=memory_size)
@@ -950,7 +951,7 @@ class ProgressiveNeuralNetworks:
     
     def __init__(self, base_agent: ActiveInferenceAgent):
         self.base_agent = base_agent
-        self.logger = logging.getLogger("ProgressiveNeuralNetworks")
+        self.logger = get_unified_logger()
         
         # Network columns (one per task)
         self.network_columns: List[Dict[str, Any]] = []
@@ -1013,7 +1014,7 @@ class ProgressiveNeuralNetworks:
         
         creation_time = time.time() - start_time
         
-        self.logger.info(f"Added new task column for {task_id} (column {column_index})")
+        self.logger.log_info(f"Added new task column for {task_id} (column {column_index})", component="continual_learning")
         
         return {
             'task_id': task_id,
@@ -1260,7 +1261,7 @@ class ProgressiveNeuralNetworks:
                 column['frozen'] = True
                 frozen_columns.append(task_id)
         
-        self.logger.info(f"Frozen {len(frozen_columns)} columns: {frozen_columns}")
+        self.logger.log_info(f"Frozen {len(frozen_columns)} columns: {frozen_columns}", component="continual_learning")
         
         return {
             'frozen_columns': frozen_columns,

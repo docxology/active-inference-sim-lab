@@ -7,7 +7,6 @@ perception, planning, and action based on the Free Energy Principle.
 
 import numpy as np
 from typing import Dict, Any, Optional, List, Tuple, Union
-import logging
 import traceback
 import warnings
 from pathlib import Path
@@ -17,7 +16,7 @@ from .generative_model import GenerativeModel
 from .free_energy import FreeEnergyObjective
 from ..inference.variational import VariationalInference
 from ..planning.active_planner import ActivePlanner
-from ..utils.validation import (
+from ..utils.advanced_validation import (
     ValidationError, ActiveInferenceError, ModelError, InferenceError, PlanningError,
     validate_array, validate_dimensions, validate_inputs, handle_errors
 )
@@ -42,7 +41,7 @@ class ActiveInferenceAgent:
                  temperature: float = 1.0,
                  agent_id: str = "agent_0",
                  enable_logging: bool = True,
-                 log_level: int = logging.INFO,
+                 log_level: str = "INFO",
                  max_history_length: int = 10000):
         """
         Initialize Active Inference Agent.
@@ -148,44 +147,17 @@ class ActiveInferenceAgent:
             self.total_reward = 0.0
             
             # Setup logging first
-            self.logger = logging.getLogger(f"ActiveInferenceAgent.{self.agent_id}")
-            if self.enable_logging:
-                self.logger.setLevel(log_level)
-                if not self.logger.handlers:
-                    handler = logging.StreamHandler()
-                    formatter = logging.Formatter(
-                        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-                    )
-                    handler.setFormatter(formatter)
-                    self.logger.addHandler(handler)
+            self.logger = get_unified_logger()
             
             # Initialize beliefs with priors (with error handling)
             try:
                 self._initialize_beliefs()
                 self._is_initialized = True
-                self.logger.info(f"Agent {self.agent_id} initialized successfully")
+
             except Exception as e:
-                self.logger.error(f"Failed to initialize beliefs: {e}")
-                raise ActiveInferenceError(f"Agent initialization failed: {e}")
-                
-        except Exception as e:
-            # Log initialization error and re-raise
-            if hasattr(self, 'logger'):
-                self.logger.error(f"Agent initialization failed: {e}")
-                self.logger.debug(f"Traceback: {traceback.format_exc()}")
-            raise
-        
-    def _initialize_beliefs(self):
-        """Initialize agent beliefs from model priors.
-        
-        Raises:
-            ModelError: If priors are invalid
-            ValidationError: If belief initialization fails
-        """
-        try:
-            priors = self.generative_model.get_all_priors()
-            if not priors:
-                raise ModelError("No priors available from generative model")
+                # Log initialization error and re-raise
+                if hasattr(self, 'logger'):
+                    self.logger.log_error(f"Agent initialization failed: {e}", component="agent")
             
             for name, prior in priors.items():
                 if not hasattr(prior, 'mean') or not hasattr(prior, 'variance'):
@@ -201,7 +173,6 @@ class ActiveInferenceAgent:
                 )
                 self.beliefs.add_belief(name, belief)
                 
-            self.logger.debug(f"Initialized {len(priors)} belief components")
             
         except Exception as e:
             self._record_error("belief_initialization", e)
@@ -253,7 +224,6 @@ class ActiveInferenceAgent:
             # Save snapshot for history
             self.beliefs.save_snapshot()
             
-            self.logger.debug(f"Successfully updated beliefs from observation")
             return self.beliefs
             
         except (ValidationError, InferenceError):
@@ -318,7 +288,6 @@ class ActiveInferenceAgent:
             if np.any(np.isnan(optimal_action)) or np.any(np.isinf(optimal_action)):
                 raise PlanningError("Planned action contains NaN or infinite values")
             
-            self.logger.debug(f"Successfully planned action with horizon {horizon}")
             return optimal_action
             
         except (ValidationError, PlanningError):
@@ -362,15 +331,9 @@ class ActiveInferenceAgent:
         else:
             self._health_status = "healthy"
         
-        self.logger.warning(f"Error recorded: {error_type} - {error}")
-    
-    def _trim_history(self) -> None:
-        """Trim history to prevent memory bloat."""
-        if len(self.history['observations']) > self.max_history_length:
             trim_size = self.max_history_length // 2
             for key in ['observations', 'actions', 'beliefs', 'free_energy', 'rewards']:
                 self.history[key] = self.history[key][-trim_size:]
-            self.logger.info(f"Trimmed history to {trim_size} entries")
     
     @handle_errors((ActiveInferenceError, ValidationError), log_errors=True)
     def act(self, observation: np.ndarray) -> np.ndarray:
@@ -419,16 +382,10 @@ class ActiveInferenceAgent:
                 self.history['free_energy'].append(free_energy)
                 
             except Exception as e:
-                self.logger.warning(f"Failed to record history: {e}")
-                # Continue execution even if history recording fails
-            
-            self.step_count += 1
-            
-            # Trim history periodically to prevent memory bloat
-            if len(self.history['observations']) > self.max_history_length:
-                self._trim_history()
-            
-            self.logger.debug(f"Completed perception-action cycle, step {self.step_count}")
+                self.logger.log_error(f"Perception-action cycle failed: {e}", component="agent")
+                raise
+
+            self.logger.log_debug(f"Completed perception-action cycle, step {self.step_count}", component="agent")
             return action
             
         except (ValidationError, ActiveInferenceError):
@@ -468,7 +425,7 @@ class ActiveInferenceAgent:
             if reward is not None:
                 self.history['rewards'].append(reward)
                 self.total_reward += reward
-                self.logger.debug(f"Recorded reward: {reward}, total: {self.total_reward}")
+                self.logger.log_debug(f"Recorded reward: {reward}, total: {self.total_reward}")
             
             # Basic model learning based on prediction error
             try:
@@ -490,16 +447,14 @@ class ActiveInferenceAgent:
                                 prediction_error, learning_rate
                             )
                         
-                        self.logger.debug(f"Model update: prediction_error={prediction_error:.4f}")
                     else:
                         # Fallback: just update observation statistics
                         if hasattr(self.generative_model, 'update_observation_stats'):
                             self.generative_model.update_observation_stats(observation)
                 
-                self.logger.debug("Model update completed")
                 
             except Exception as e:
-                self.logger.warning(f"Model learning failed, using fallback: {e}")
+                self.logger.log_warning(f"Model learning failed, using fallback: {e}")
                 # Continue without model updates - system remains functional
                 
         except (ValidationError, ModelError):
@@ -522,12 +477,15 @@ class ActiveInferenceAgent:
             
             # Update beliefs through inference
             self.beliefs = self.infer_states(observation)
-            self.logger.debug("Beliefs updated successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to update beliefs: {e}")
+
+        except (ValidationError, ActiveInferenceError):
+            # Re-raise specific errors
             raise
-    
+        except Exception as e:
+            # Handle unexpected errors
+            self._record_error("belief_update", e)
+            self.logger.log_error(f"Belief update failed: {e}", component="agent")
+
     @handle_errors((ActiveInferenceError, ValidationError), log_errors=True)
     def reset(self, observation: Optional[np.ndarray] = None) -> None:
         """
@@ -560,7 +518,6 @@ class ActiveInferenceAgent:
             if observation is not None:
                 self.infer_states(observation)
             
-            self.logger.info(f"Agent reset for episode {self.episode_count}")
             
         except (ValidationError, ActiveInferenceError):
             # Re-raise specific errors
@@ -617,11 +574,11 @@ class ActiveInferenceAgent:
             stats.update(self.get_health_status())
             
             return stats
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to compute statistics: {e}")
-            return self.get_health_status()
-    
+            self.logger.log_error(f"Failed to get statistics: {e}", component="agent")
+            raise
+
     @handle_errors((Exception,), log_errors=True)
     def save_checkpoint(self, filepath: str) -> None:
         """Save agent state to checkpoint file.
@@ -678,7 +635,6 @@ class ActiveInferenceAgent:
             with open(filepath, 'w') as f:
                 json.dump(checkpoint, f, indent=2, default=str)
             
-            self.logger.info(f"Agent checkpoint saved to {filepath}")
             
         except (ValidationError, FileNotFoundError, PermissionError):
             # Re-raise specific errors
@@ -772,6 +728,6 @@ class ActiveInferenceAgent:
         """Cleanup when agent is destroyed."""
         try:
             if hasattr(self, 'logger') and self.logger:
-                self.logger.info(f"Agent {self.agent_id} destroyed after {self.step_count} steps")
+                self.logger.log_info("ActiveInferenceAgent destroyed", component="agent")
         except:
             pass  # Ignore errors during cleanup

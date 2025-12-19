@@ -13,7 +13,6 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
 import time
-import logging
 from abc import ABC, abstractmethod
 import itertools
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,6 +22,7 @@ from pathlib import Path
 from ..core.agent import ActiveInferenceAgent
 from .benchmarks import BenchmarkResult
 from .advanced_algorithms import (
+from ..utils.logging_config import get_unified_logger
     HierarchicalTemporalActiveInference,
     MetaActiveInference,
     QuantumInspiredVariationalInference,
@@ -52,7 +52,7 @@ class TemporalCoherenceBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("TemporalCoherenceBenchmark")
+        self.logger = get_unified_logger()
         
         # Benchmark parameters
         self.temporal_scales = [1, 5, 25, 125]  # Multiple time scales
@@ -136,7 +136,7 @@ class TemporalCoherenceBenchmark:
                     hierarchy_statistics.append(hierarchy_stats)
                 
                 if episode % 10 == 0:
-                    self.logger.info(f"Episode {episode}: temporal_coherence={avg_coherence:.3f}")
+                    self.logger.log_info(f"Episode {episode}: temporal_coherence={avg_coherence:.3f}")
             
             # Compute overall metrics
             final_coherence = np.mean(coherence_scores)
@@ -156,7 +156,7 @@ class TemporalCoherenceBenchmark:
                 cross_scale_consistency * 0.1
             )
             
-            execution_time = time.time() - start_time
+            execution_time = time.time(, component="novel_benchmarks") - start_time
             
             return NovelBenchmarkResult(
                 benchmark_name="temporal_coherence",
@@ -180,7 +180,7 @@ class TemporalCoherenceBenchmark:
             )
             
         except Exception as e:
-            self.logger.error(f"Temporal coherence benchmark failed: {e}")
+            self.logger.log_error(f"Temporal coherence benchmark failed: {e}", component="novel_benchmarks")
             return NovelBenchmarkResult(
                 benchmark_name="temporal_coherence",
                 agent_id=agent.agent_id,
@@ -275,7 +275,7 @@ class MetaLearningTransferBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("MetaLearningBenchmark")
+        self.logger = get_unified_logger()
         
         # Define a suite of related tasks for transfer learning
         self.task_suite = {
@@ -359,7 +359,7 @@ class MetaLearningTransferBenchmark:
                 adaptation_times.append(adaptation_time)
                 transfer_efficiencies.append(transfer_efficiency)
                 
-                self.logger.info(f"Task {task_name}: adaptation_quality={adaptation_quality:.3f}, "
+                self.logger.log_info(f"Task {task_name}: adaptation_quality={adaptation_quality:.3f}, "
                                f"transfer_efficiency={transfer_efficiency:.3f}")
             
             # Compute overall metrics
@@ -403,7 +403,7 @@ class MetaLearningTransferBenchmark:
             )
             
         except Exception as e:
-            self.logger.error(f"Meta-learning benchmark failed: {e}")
+            self.logger.log_error(f"Meta-learning benchmark failed: {e}", component="novel_benchmarks")
             return NovelBenchmarkResult(
                 benchmark_name="meta_learning_transfer",
                 agent_id=agent.agent_id,
@@ -477,7 +477,7 @@ class QuantumInformationBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("QuantumInformationBenchmark")
+        self.logger = get_unified_logger()
         
         # Quantum benchmark parameters
         self.n_qubits_range = [4, 6, 8, 10]
@@ -547,7 +547,7 @@ class QuantumInformationBenchmark:
                 if episode % 5 == 0:
                     q_score = quantum_scores[-1] if quantum_scores else 0
                     c_score = classical_scores[-1] if classical_scores else 0
-                    self.logger.info(f"Episode {episode}: quantum_info={q_score:.3f}, classical_info={c_score:.3f}")
+                    self.logger.log_info(f"Episode {episode}: quantum_info={q_score:.3f}, classical_info={c_score:.3f}")
             
             # Compute quantum advantage metrics
             avg_quantum_score = np.mean(quantum_scores)
@@ -595,7 +595,7 @@ class QuantumInformationBenchmark:
             )
             
         except Exception as e:
-            self.logger.error(f"Quantum information benchmark failed: {e}")
+            self.logger.log_error(f"Quantum information benchmark failed: {e}", component="novel_benchmarks")
             return NovelBenchmarkResult(
                 benchmark_name="quantum_information",
                 agent_id=agent.agent_id,
@@ -642,7 +642,7 @@ class MultiModalFusionBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("MultiModalFusionBenchmark")
+        self.logger = get_unified_logger()
         
         # Multi-modal test configurations
         self.modality_combinations = [
@@ -724,7 +724,7 @@ class MultiModalFusionBenchmark:
                 integration_scores.append(avg_integration_score)
                 
                 if episode % 5 == 0:
-                    self.logger.info(f"Episode {episode}: integration_quality={avg_integration_score:.3f}")
+                    self.logger.log_info(f"Episode {episode}: integration_quality={avg_integration_score:.3f}")
             
             # Compute overall metrics
             avg_integration_quality = np.mean(integration_scores)
@@ -746,7 +746,7 @@ class MultiModalFusionBenchmark:
                 cross_modal_learning * 0.2
             )
             
-            execution_time = time.time() - start_time
+            execution_time = time.time(, component="novel_benchmarks") - start_time
             
             return NovelBenchmarkResult(
                 benchmark_name="multimodal_fusion",
@@ -770,7 +770,7 @@ class MultiModalFusionBenchmark:
             )
             
         except Exception as e:
-            self.logger.error(f"Multimodal fusion benchmark failed: {e}")
+            self.logger.log_error(f"Multimodal fusion benchmark failed: {e}", component="novel_benchmarks")
             return NovelBenchmarkResult(
                 benchmark_name="multimodal_fusion",
                 agent_id=agent.agent_id,
@@ -877,7 +877,7 @@ class EmergentBehaviorDiscoveryBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("EmergentBehaviorBenchmark")
+        self.logger = get_unified_logger()
         
         # Behavior analysis parameters
         self.behavior_categories = [
@@ -967,7 +967,7 @@ class EmergentBehaviorDiscoveryBenchmark:
                 
                 if episode % 20 == 0:
                     avg_novelty = np.mean(novelty_scores) if novelty_scores else 0
-                    self.logger.info(f"Episode {episode}: behavior_novelty={avg_novelty:.3f}, "
+                    self.logger.log_info(f"Episode {episode}: behavior_novelty={avg_novelty:.3f}, "
                                    f"complexity={complexity:.3f}")
             
             # Compute overall metrics
@@ -1010,7 +1010,7 @@ class EmergentBehaviorDiscoveryBenchmark:
             )
             
         except Exception as e:
-            self.logger.error(f"Emergent behavior benchmark failed: {e}")
+            self.logger.log_error(f"Emergent behavior benchmark failed: {e}", component="novel_benchmarks")
             return NovelBenchmarkResult(
                 benchmark_name="emergent_behavior",
                 agent_id=agent.agent_id,
@@ -1134,7 +1134,7 @@ class NovelBenchmarkSuite:
     def __init__(self, output_dir: str = "novel_benchmarks"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
-        self.logger = logging.getLogger("NovelBenchmarkSuite")
+        self.logger = get_unified_logger()
         
         # Initialize benchmark components
         self.benchmarks = {
@@ -1153,15 +1153,15 @@ class NovelBenchmarkSuite:
                                       environment_factory: Callable = None) -> Dict[str, NovelBenchmarkResult]:
         """Run complete suite of novel benchmarks."""
         
-        self.logger.info("Starting Novel Benchmark Suite for Advanced Active Inference")
-        suite_start_time = time.time()
+        self.logger.log_info("Starting Novel Benchmark Suite for Advanced Active Inference")
+        suite_start_time = time.time(, component="novel_benchmarks")
         
         results = {}
         
         for benchmark_name, benchmark in self.benchmarks.items():
             try:
-                self.logger.info(f"Running {benchmark_name} benchmark...")
-                benchmark_start_time = time.time()
+                self.logger.log_info(f"Running {benchmark_name} benchmark...")
+                benchmark_start_time = time.time(, component="novel_benchmarks")
                 
                 # Run appropriate benchmark
                 if benchmark_name == 'temporal_coherence':
@@ -1175,17 +1175,17 @@ class NovelBenchmarkSuite:
                 elif benchmark_name == 'emergent_behavior':
                     result = benchmark.evaluate_emergent_behaviors(agent, environment)
                 else:
-                    self.logger.warning(f"Skipping {benchmark_name} - missing requirements")
+                    self.logger.log_warning(f"Skipping {benchmark_name} - missing requirements")
                     continue
                 
                 benchmark_time = time.time() - benchmark_start_time
                 results[benchmark_name] = result
-                self.results.append(result)
+                self.results.append(result, component="novel_benchmarks")
                 
-                self.logger.info(f"{benchmark_name} completed: score={result.score:.3f}, time={benchmark_time:.1f}s")
+                self.logger.log_info(f"{benchmark_name} completed: score={result.score:.3f}, time={benchmark_time:.1f}s")
                 
             except Exception as e:
-                self.logger.error(f"{benchmark_name} benchmark failed: {e}")
+                self.logger.log_error(f"{benchmark_name} benchmark failed: {e}", component="novel_benchmarks")
                 # Create error result
                 error_result = NovelBenchmarkResult(
                     benchmark_name=benchmark_name,
@@ -1206,7 +1206,7 @@ class NovelBenchmarkSuite:
         # Generate comprehensive report
         self._generate_novel_benchmark_report(results, suite_time)
         
-        self.logger.info(f"Novel Benchmark Suite completed in {suite_time:.1f}s")
+        self.logger.log_info(f"Novel Benchmark Suite completed in {suite_time:.1f}s", component="novel_benchmarks")
         
         return results
     
@@ -1263,7 +1263,7 @@ class NovelBenchmarkSuite:
         with open(report_file, 'w') as f:
             json.dump(report, f, indent=2, default=str)
         
-        self.logger.info(f"Novel benchmark report saved to {report_file}")
+        self.logger.log_info(f"Novel benchmark report saved to {report_file}", component="novel_benchmarks")
     
     def _generate_research_insights(self, results: Dict[str, NovelBenchmarkResult]) -> Dict[str, Any]:
         """Generate insights for research publication."""
@@ -1442,4 +1442,4 @@ class NovelBenchmarkSuite:
         with open(filepath, 'w') as f:
             json.dump(results_data, f, indent=2, default=str)
         
-        self.logger.info(f"Novel benchmark results saved to {filepath}")
+        self.logger.log_info(f"Novel benchmark results saved to {filepath}", component="novel_benchmarks")

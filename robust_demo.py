@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from active_inference import ActiveInferenceAgent
 from active_inference.environments import MockEnvironment
-from active_inference.utils.validation import ValidationError, ActiveInferenceError
+from active_inference.utils.advanced_validation import ValidationError, ActiveInferenceError
 
 
 def test_input_validation():

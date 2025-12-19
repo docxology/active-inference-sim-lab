@@ -13,7 +13,7 @@ src_path = repo_root / "src" / "python"
 sys.path.insert(0, str(src_path))
 
 from active_inference import ActiveInferenceAgent
-from active_inference.utils.validation import ValidationError
+from active_inference.utils.advanced_validation import ValidationError
 
 
 class TestSecurityValidation:

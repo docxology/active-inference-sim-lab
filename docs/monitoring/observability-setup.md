@@ -628,7 +628,7 @@ Add to your Python application:
 
 ```python
 from active_inference.monitoring.metrics import metrics_instance
-from active_inference.utils.logging_config import setup_logging
+from active_inference.utils.logging_config import setup_global_logging
 
 # Setup logging
 setup_logging()

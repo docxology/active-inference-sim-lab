@@ -14,7 +14,7 @@ import warnings
 from ..core.beliefs import Belief, BeliefState
 from ..core.generative_model import GenerativeModel
 from .variational import VariationalInference
-from ..utils.validation import (
+from ..utils.advanced_validation import (
     ValidationError, InferenceError,
     validate_array, validate_inputs, handle_errors
 )

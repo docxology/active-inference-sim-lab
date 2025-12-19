@@ -13,11 +13,12 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
-import logging
 import time
 import json
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
+
+from ..utils.logging_config import get_unified_logger
 
 from ..core.agent import ActiveInferenceAgent
 from ..core.beliefs import Belief, BeliefState
@@ -69,7 +70,7 @@ class HybridSymbolicConnectionistAI:
         self.base_agent = base_agent
         self.max_symbolic_rules = max_symbolic_rules
         self.rule_learning_rate = rule_learning_rate
-        self.logger = logging.getLogger("HSCAI")
+        self.logger = get_unified_logger()
         
         # Symbolic components
         self.symbolic_rules: List[SymbolicRule] = []
@@ -112,7 +113,7 @@ class HybridSymbolicConnectionistAI:
             'learning': ['model_update', 'belief_revision', 'rule_acquisition']
         }
         
-        self.logger.info(f"Initialized hybrid architecture with {len(basic_rules)} basic rules")
+        self.logger.log_info(f"Initialized hybrid architecture with {len(basic_rules)} basic rules", component="cognitive_architectures")
     
     def hybrid_decision_making(self, 
                              observation: np.ndarray,
@@ -178,7 +179,7 @@ class HybridSymbolicConnectionistAI:
             }
             
         except Exception as e:
-            self.logger.error(f"Neural processing failed: {e}")
+            self.logger.log_error(f"Neural processing failed: {e}", component="cognitive_architectures")
             return {
                 'action': np.zeros(self.base_agent.action_dim),
                 'error': str(e),
@@ -438,7 +439,7 @@ class HybridSymbolicConnectionistAI:
                 'timestamp': time.time()
             })
             
-            self.logger.info(f"Acquired new rule: {feature_name} -> {new_action}")
+            self.logger.log_info(f"Acquired new rule: {feature_name} -> {new_action}", component="cognitive_architectures")
     
     def _generate_novel_action_type(self) -> str:
         """Generate a novel action type for rule acquisition."""
@@ -509,7 +510,7 @@ class CompositionalActiveInference:
     
     def __init__(self, base_agent: ActiveInferenceAgent):
         self.base_agent = base_agent
-        self.logger = logging.getLogger("CompositionalAI")
+        self.logger = get_unified_logger()
         
         # Compositional components
         self.primitive_skills: Dict[str, Callable] = {}
@@ -830,7 +831,7 @@ class CompositionalActiveInference:
             }
             
             self.compositional_performance['emergent_behaviors'].append(emergent_behavior)
-            self.logger.info(f"Detected emergent behavior: {emergent_behavior['name']}")
+            self.logger.log_info(f"Detected emergent behavior: {emergent_behavior['name']}", component="cognitive_architectures")
     
     def _record_compositional_performance(self, composition: Dict[str, Any], 
                                         execution_result: Dict[str, Any]):
@@ -885,7 +886,7 @@ class CausalActiveInference:
     
     def __init__(self, base_agent: ActiveInferenceAgent):
         self.base_agent = base_agent
-        self.logger = logging.getLogger("CausalAI")
+        self.logger = get_unified_logger()
         
         # Causal model components
         self.causal_graph: Dict[str, List[str]] = {}  # variable -> parents

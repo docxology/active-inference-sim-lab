@@ -12,8 +12,8 @@ capabilities for production-grade Active Inference deployments:
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union, Type
+from .logging_config import get_unified_logger
 from dataclasses import dataclass, field
-import logging
 import time
 import threading
 from queue import Queue, Empty
@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 import psutil
 import hashlib
 import json
+import re
 from pathlib import Path
 from functools import wraps
 import traceback
@@ -88,7 +89,7 @@ class AdvancedValidator:
     
     def __init__(self, strict_mode: bool = True):
         self.strict_mode = strict_mode
-        self.logger = logging.getLogger("AdvancedValidator")
+        self.logger = get_unified_logger()
         self.validation_history = deque(maxlen=1000)
         self.error_patterns = defaultdict(int)
         
@@ -136,7 +137,7 @@ class AdvancedValidator:
             result.is_valid = False
             result.errors.append(f"Validation system error: {str(e)}")
             result.confidence_score = 0.0
-            self.logger.error(f"Validation system error: {e}")
+            self.logger.log_error(f"Validation system error: {e}")
         
         result.validation_time = time.time() - start_time
         
@@ -655,7 +656,7 @@ class HealthMonitor:
     
     def __init__(self, monitoring_interval: float = 5.0):
         self.monitoring_interval = monitoring_interval
-        self.logger = logging.getLogger("HealthMonitor")
+        self.logger = get_unified_logger()
         self.is_monitoring = False
         self.monitor_thread = None
         
@@ -686,14 +687,14 @@ class HealthMonitor:
         self.is_monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
         self.monitor_thread.start()
-        self.logger.info("Health monitoring started")
+        self.logger.log_info("Health monitoring started")
     
     def stop_monitoring(self):
         """Stop health monitoring."""
         self.is_monitoring = False
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=2.0)
-        self.logger.info("Health monitoring stopped")
+        self.logger.log_info("Health monitoring stopped")
     
     def _monitoring_loop(self):
         """Main monitoring loop."""
@@ -712,7 +713,7 @@ class HealthMonitor:
                 time.sleep(self.monitoring_interval)
                 
             except Exception as e:
-                self.logger.error(f"Health monitoring error: {e}")
+                self.logger.log_error(f"Health monitoring error: {e}")
                 time.sleep(self.monitoring_interval)
     
     def _collect_system_metrics(self) -> HealthMetrics:
@@ -739,7 +740,7 @@ class HealthMonitor:
             )
         
         except Exception as e:
-            self.logger.error(f"Error collecting system metrics: {e}")
+            self.logger.log_error(f"Error collecting system metrics: {e}", component="advanced_validation")
             return HealthMetrics(
                 cpu_usage=0, memory_usage=0, disk_usage=0,
                 error_rate=0, response_time=0, throughput=0,
@@ -776,12 +777,12 @@ class HealthMonitor:
         if alerts:
             self.last_alert_time = current_time
             for alert_msg in alerts:
-                self.logger.warning(f"Health alert: {alert_msg}")
+                self.logger.log_warning(f"Health alert: {alert_msg}", component="advanced_validation")
                 for callback in self.alert_callbacks:
                     try:
                         callback(alert_msg, metrics)
                     except Exception as e:
-                        self.logger.error(f"Alert callback error: {e}")
+                        self.logger.log_error(f"Alert callback error: {e}", component="advanced_validation")
     
     def add_alert_callback(self, callback: Callable[[str, HealthMetrics], None]):
         """Add callback function for health alerts."""
@@ -837,7 +838,7 @@ class SecurityMonitor:
     """Security monitoring and threat detection system."""
     
     def __init__(self):
-        self.logger = logging.getLogger("SecurityMonitor")
+        self.logger = get_unified_logger()
         self.security_events = deque(maxlen=10000)
         self.threat_patterns = self._initialize_threat_patterns()
         self.blocked_ips = set()
@@ -911,8 +912,8 @@ class SecurityMonitor:
                 )
         
         except Exception as e:
-            self.logger.error(f"Security validation error: {e}")
-            result.warnings.append(f"Security validation error: {str(e)}")
+            self.logger.log_error(f"Security validation error: {e}")
+            result.warnings.append(f"Security validation error: {str(e, component="advanced_validation")}", component="advanced_validation")
         
         return result
     
@@ -938,7 +939,7 @@ class SecurityMonitor:
     def _block_ip(self, source_ip: str):
         """Block an IP address."""
         self.blocked_ips.add(source_ip)
-        self.logger.warning(f"IP {source_ip} has been blocked due to security threat")
+        self.logger.log_warning(f"IP {source_ip} has been blocked due to security threat", component="advanced_validation")
         
         # Record blocking event
         self._record_security_event(
@@ -966,11 +967,11 @@ class SecurityMonitor:
         if severity == 'critical':
             self.logger.critical(log_msg)
         elif severity == 'high':
-            self.logger.error(log_msg)
+            self.logger.log_error(log_msg)
         elif severity == 'medium':
-            self.logger.warning(log_msg)
+            self.logger.log_warning(log_msg, component="advanced_validation")
         else:
-            self.logger.info(log_msg)
+            self.logger.log_info(log_msg, component="advanced_validation")
     
     def is_ip_blocked(self, source_ip: str) -> bool:
         """Check if an IP is blocked."""
@@ -980,9 +981,9 @@ class SecurityMonitor:
         """Unblock an IP address."""
         if source_ip in self.blocked_ips:
             self.blocked_ips.remove(source_ip)
-            self.logger.info(f"IP {source_ip} has been unblocked")
+            self.logger.log_info(f"IP {source_ip} has been unblocked", component="advanced_validation")
     
-    def get_security_summary(self) -> Dict[str, Any]:
+    def get_security_summary(self, component="advanced_validation") -> Dict[str, Any]:
         """Get security monitoring summary."""
         recent_events = [e for e in self.security_events 
                         if time.time() - e.timestamp <= 3600]  # Last hour
@@ -1027,17 +1028,17 @@ def robust_execution(max_retries: int = 3,
                         sleep_time = 0.1 * (2 ** attempt)
                         time.sleep(sleep_time)
                         
-                        logging.getLogger(func.__module__).warning(
+                        get_unified_logger().warning(
                             f"Attempt {attempt + 1} failed for {func.__name__}: {e}. Retrying..."
                         )
                     else:
-                        logging.getLogger(func.__module__).error(
+                        get_unified_logger().error(
                             f"All {max_retries + 1} attempts failed for {func.__name__}: {e}"
                         )
             
             # Return fallback value if all attempts failed
             if fallback_value is not None:
-                logging.getLogger(func.__module__).info(
+                get_unified_logger().info(
                     f"Using fallback value for {func.__name__}"
                 )
                 return fallback_value
@@ -1057,15 +1058,15 @@ def error_recovery_context(recovery_actions: List[Callable] = None):
     try:
         yield
     except Exception as e:
-        logging.getLogger("ErrorRecovery").error(f"Error occurred: {e}")
+        get_unified_logger().error(f"Error occurred: {e}")
         
         # Execute recovery actions
         for action in recovery_actions:
             try:
                 action()
-                logging.getLogger("ErrorRecovery").info(f"Recovery action executed: {action.__name__}")
+                get_unified_logger().info(f"Recovery action executed: {action.__name__}")
             except Exception as recovery_error:
-                logging.getLogger("ErrorRecovery").error(
+                get_unified_logger().error(
                     f"Recovery action failed: {recovery_error}"
                 )
         
@@ -1077,7 +1078,7 @@ class RobustActiveInferenceFramework:
     """Robust Active Inference framework with comprehensive error handling."""
     
     def __init__(self):
-        self.logger = logging.getLogger("RobustActiveInference")
+        self.logger = get_unified_logger()
         
         # Initialize monitoring and validation systems
         self.validator = AdvancedValidator(strict_mode=False)
@@ -1096,7 +1097,7 @@ class RobustActiveInferenceFramework:
         # Start monitoring
         self.health_monitor.start_monitoring()
         
-        self.logger.info("Robust Active Inference Framework initialized")
+        self.logger.log_info("Robust Active Inference Framework initialized", component="advanced_validation")
     
     @robust_execution(max_retries=2, fallback_value={'status': 'error', 'value': None})
     def safe_agent_operation(self, agent: Any, operation: str, *args, **kwargs) -> Dict[str, Any]:
@@ -1136,8 +1137,8 @@ class RobustActiveInferenceFramework:
             self.framework_stats['failed_operations'] += 1
             
             # Log error with context
-            self.logger.error(f"Agent operation '{operation}' failed: {e}")
-            self.logger.debug(f"Traceback: {traceback.format_exc()}")
+            self.logger.log_error(f"Agent operation '{operation}' failed: {e}")
+            self.logger.log_debug(f"Traceback: {traceback.format_exc()}", component="advanced_validation")
             
             # Return error information
             return {
@@ -1193,21 +1194,991 @@ class RobustActiveInferenceFramework:
             return min(1.0, max(0.0, overall_score))
         
         except Exception as e:
-            self.logger.error(f"Error computing health score: {e}")
+            self.logger.log_error(f"Error computing health score: {e}")
             return 0.5  # Default score
     
     def shutdown(self):
         """Gracefully shutdown the framework."""
-        self.logger.info("Shutting down Robust Active Inference Framework")
+        self.logger.log_info("Shutting down Robust Active Inference Framework")
         
         try:
             self.health_monitor.stop_monitoring()
             
             # Log final statistics
             final_stats = self.get_framework_health()
-            self.logger.info(f"Final framework statistics: {final_stats['framework_stats']}")
+            self.logger.log_info(f"Final framework statistics: {final_stats['framework_stats']}")
             
         except Exception as e:
-            self.logger.error(f"Error during shutdown: {e}")
+            self.logger.log_error(f"Error during shutdown: {e}")
         
-        self.logger.info("Framework shutdown complete")
+        self.logger.log_info("Framework shutdown complete")
+
+
+# Backward compatibility: Basic validation functions and classes from utils/validation.py
+
+class ValidationError(Exception):
+    """Custom exception for validation errors."""
+    pass
+
+
+class ActiveInferenceError(Exception):
+    """Base exception for active inference specific errors."""
+    pass
+
+
+class ModelError(ActiveInferenceError):
+    """Exception for generative model errors."""
+    pass
+
+
+class InferenceError(ActiveInferenceError):
+    """Exception for inference engine errors."""
+    pass
+
+
+class PlanningError(ActiveInferenceError):
+    """Exception for planning errors."""
+    pass
+
+
+def validate_array(arr: np.ndarray,
+                  name: str,
+                  expected_shape: Optional[Tuple] = None,
+                  expected_dtype: Optional[np.dtype] = None,
+                  min_val: Optional[float] = None,
+                  max_val: Optional[float] = None,
+                  allow_nan: bool = False,
+                  allow_inf: bool = False) -> None:
+    """
+    Validate numpy array properties.
+
+    Args:
+        arr: Array to validate
+        name: Name of the array for error messages
+        expected_shape: Expected shape (None to skip check)
+        expected_dtype: Expected data type (None to skip check)
+        min_val: Minimum allowed value (None to skip check)
+        max_val: Maximum allowed value (None to skip check)
+        allow_nan: Whether NaN values are allowed
+        allow_inf: Whether infinite values are allowed
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    if not isinstance(arr, np.ndarray):
+        raise ValidationError(f"{name} must be a numpy array, got {type(arr)}")
+
+    if arr.size == 0:
+        raise ValidationError(f"{name} cannot be empty")
+
+    if expected_shape is not None and arr.shape != expected_shape:
+        raise ValidationError(f"{name} has shape {arr.shape}, expected {expected_shape}")
+
+    if expected_dtype is not None and arr.dtype != expected_dtype:
+        raise ValidationError(f"{name} has dtype {arr.dtype}, expected {expected_dtype}")
+
+    if not allow_nan and np.any(np.isnan(arr)):
+        raise ValidationError(f"{name} contains NaN values")
+
+    if not allow_inf and np.any(np.isinf(arr)):
+        raise ValidationError(f"{name} contains infinite values")
+
+    if min_val is not None and np.any(arr < min_val):
+        raise ValidationError(f"{name} contains values below {min_val}")
+
+    if max_val is not None and np.any(arr > max_val):
+        raise ValidationError(f"{name} contains values above {max_val}")
+
+
+class SecurityValidator:
+    """Security validation for Active Inference inputs."""
+
+    def __init__(self):
+        self.threat_patterns = {
+            'sql_injection': [r'union\s+select', r'drop\s+table', r'insert\s+into'],
+            'xss': [r'<script', r'javascript:', r'onload\s*='],
+            'command_injection': [r';\s*rm\s+', r';\s*cat\s+', r'&&\s*rm']
+        }
+
+    def validate_input(self, input_data: Any) -> bool:
+        """Basic security validation of input data."""
+        try:
+            if isinstance(input_data, np.ndarray):
+                # Check for NaN/Inf values
+                if np.any(np.isnan(input_data)) or np.any(np.isinf(input_data)):
+                    return False
+                # Check for reasonable size
+                if input_data.nbytes > 10**7:  # 10MB limit
+                    return False
+            elif isinstance(input_data, str):
+                # Check for malicious patterns
+                input_lower = input_data.lower()
+                for category, patterns in self.threat_patterns.items():
+                    for pattern in patterns:
+                        if re.search(pattern, input_lower):
+                            return False
+            return True
+        except Exception:
+            return False
+
+
+class AdvancedInputValidator:
+    """Advanced input validation with detailed checks."""
+
+    def __init__(self):
+        self.max_size = 10**6  # 1MB
+        self.validation_cache = {}
+
+    def validate_comprehensive(self, input_data: Any) -> Dict[str, bool]:
+        """Comprehensive validation returning detailed results."""
+        results = {
+            'size_valid': True,
+            'type_valid': True,
+            'content_valid': True,
+            'security_valid': True
+        }
+
+        try:
+            # Size validation
+            if hasattr(input_data, 'nbytes'):
+                results['size_valid'] = input_data.nbytes <= self.max_size
+
+            # Type validation
+            results['type_valid'] = isinstance(input_data, (np.ndarray, list, int, float))
+
+            # Content validation
+            if isinstance(input_data, np.ndarray):
+                results['content_valid'] = not (np.any(np.isnan(input_data)) or np.any(np.isinf(input_data)))
+
+            return results
+        except Exception:
+            return {k: False for k in results.keys()}
+
+
+def validate_matrix(matrix: np.ndarray,
+                   name: str,
+                   square: bool = False,
+                   positive_definite: bool = False,
+                   symmetric: bool = False) -> None:
+    """
+    Validate matrix properties.
+
+    Args:
+        matrix: Matrix to validate
+        name: Name for error messages
+        square: Whether matrix must be square
+        positive_definite: Whether matrix must be positive definite
+        symmetric: Whether matrix must be symmetric
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    validate_array(matrix, name)
+
+    if matrix.ndim != 2:
+        raise ValidationError(f"{name} must be 2D, got {matrix.ndim}D")
+
+    if square and matrix.shape[0] != matrix.shape[1]:
+        raise ValidationError(f"{name} must be square, got shape {matrix.shape}")
+
+    if symmetric:
+        if not square:
+            raise ValidationError(f"{name} must be square to be symmetric")
+
+        if not np.allclose(matrix, matrix.T, rtol=1e-10, atol=1e-10):
+            raise ValidationError(f"{name} is not symmetric")
+
+    if positive_definite:
+        if not square:
+            raise ValidationError(f"{name} must be square to be positive definite")
+
+        try:
+            eigenvals = np.linalg.eigvals(matrix)
+            if np.any(eigenvals <= 1e-10):
+                raise ValidationError(f"{name} is not positive definite (min eigenvalue: {eigenvals.min()})")
+        except np.linalg.LinAlgError:
+            raise ValidationError(f"{name} eigenvalue computation failed - likely not positive definite")
+
+
+def validate_probability_distribution(probs: np.ndarray, name: str) -> None:
+    """
+    Validate probability distribution.
+
+    Args:
+        probs: Probability values
+        name: Name for error messages
+
+    Raises:
+        ValidationError: If not a valid probability distribution
+    """
+    validate_array(probs, name, min_val=0.0, max_val=1.0)
+
+    prob_sum = np.sum(probs)
+    if not np.isclose(prob_sum, 1.0, rtol=1e-6, atol=1e-6):
+        raise ValidationError(f"{name} probabilities sum to {prob_sum}, expected 1.0")
+
+
+def validate_belief_state(beliefs_dict: Dict[str, Any]) -> None:
+    """
+    Validate belief state dictionary.
+
+    Args:
+        beliefs_dict: Dictionary of belief components
+
+    Raises:
+        ValidationError: If belief state is invalid
+    """
+    if not isinstance(beliefs_dict, dict):
+        raise ValidationError(f"Beliefs must be a dictionary, got {type(beliefs_dict)}")
+
+    if len(beliefs_dict) == 0:
+        raise ValidationError("Beliefs dictionary cannot be empty")
+
+    for name, belief in beliefs_dict.items():
+        if not hasattr(belief, 'mean') or not hasattr(belief, 'variance'):
+            raise ValidationError(f"Belief '{name}' must have 'mean' and 'variance' attributes")
+
+        try:
+            validate_array(belief.mean, f"belief '{name}' mean")
+            validate_array(belief.variance, f"belief '{name}' variance", min_val=0.0)
+
+            # Check matching dimensions
+            if belief.mean.shape != belief.variance.shape:
+                raise ValidationError(
+                    f"Belief '{name}' mean and variance shapes don't match: "
+                    f"{belief.mean.shape} vs {belief.variance.shape}"
+                )
+        except AttributeError as e:
+            raise ValidationError(f"Belief '{name}' has invalid structure: {e}")
+
+
+def validate_dimensions(state_dim: int, obs_dim: int, action_dim: int) -> None:
+    """
+    Validate dimension parameters.
+
+    Args:
+        state_dim: Hidden state dimensionality
+        obs_dim: Observation dimensionality
+        action_dim: Action dimensionality
+
+    Raises:
+        ValidationError: If dimensions are invalid
+    """
+    if not isinstance(state_dim, int) or state_dim <= 0:
+        raise ValidationError(f"state_dim must be positive integer, got {state_dim}")
+
+    if not isinstance(obs_dim, int) or obs_dim <= 0:
+        raise ValidationError(f"obs_dim must be positive integer, got {obs_dim}")
+
+    if not isinstance(action_dim, int) or action_dim <= 0:
+        raise ValidationError(f"action_dim must be positive integer, got {action_dim}")
+
+    # Reasonable limits to prevent memory issues
+    MAX_DIM = 10000
+    if state_dim > MAX_DIM:
+        raise ValidationError(f"state_dim {state_dim} exceeds maximum {MAX_DIM}")
+
+    if obs_dim > MAX_DIM:
+        raise ValidationError(f"obs_dim {obs_dim} exceeds maximum {MAX_DIM}")
+
+    if action_dim > MAX_DIM:
+        raise ValidationError(f"action_dim {action_dim} exceeds maximum {MAX_DIM}")
+
+
+def validate_hyperparameters(**kwargs) -> None:
+    """
+    Validate common hyperparameters.
+
+    Args:
+        **kwargs: Hyperparameters to validate
+
+    Raises:
+        ValidationError: If any hyperparameter is invalid
+    """
+    for name, value in kwargs.items():
+        if name in ['learning_rate', 'temperature']:
+            if not isinstance(value, (int, float)) or value <= 0:
+                raise ValidationError(f"{name} must be positive number, got {value}")
+
+        elif name in ['horizon', 'max_iterations', 'n_samples']:
+            if not isinstance(value, int) or value <= 0:
+                raise ValidationError(f"{name} must be positive integer, got {value}")
+
+        elif name in ['convergence_threshold']:
+            if not isinstance(value, (int, float)) or value <= 0:
+                raise ValidationError(f"{name} must be positive number, got {value}")
+
+
+def validate_inputs(**kwargs) -> None:
+    """
+    General input validation function.
+
+    Args:
+        **kwargs: Named inputs to validate
+
+    Raises:
+        ValidationError: If any input is invalid
+    """
+    for name, value in kwargs.items():
+        if value is None:
+            continue  # Allow None values
+
+        if name.endswith('_dim'):
+            if not isinstance(value, int) or value <= 0:
+                raise ValidationError(f"{name} must be positive integer, got {value}")
+
+        elif name.endswith('_array') or name in ['observation', 'action', 'state']:
+            if isinstance(value, np.ndarray):
+                validate_array(value, name)
+
+        elif name.endswith('_matrix') or name in ['covariance', 'precision']:
+            if isinstance(value, np.ndarray):
+                validate_matrix(value, name)
+
+
+def handle_errors(error_types: Tuple = (Exception,),
+                 default_return=None,
+                 log_errors: bool = True):
+    """
+    Decorator for robust error handling.
+
+    Args:
+        error_types: Tuple of exception types to handle
+        default_return: Value to return on error (if not re-raising)
+        log_errors: Whether to log errors
+
+    Returns:
+        Decorator function
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except error_types as e:
+                if log_errors:
+                    logger = get_unified_logger()
+                    logger.log_error(f"Error in {func.__name__}: {str(e)}")
+
+                if default_return is not None:
+                    return default_return
+                else:
+                    raise
+            except Exception as e:
+                if log_errors:
+                    logger = get_unified_logger()
+                    logger.log_error(f"Unexpected error in {func.__name__}: {str(e)}", component="advanced_validation")
+                raise
+
+        return wrapper
+    return decorator
+
+
+def safe_divide(numerator: np.ndarray, denominator: np.ndarray,
+               epsilon: float = 1e-8) -> np.ndarray:
+    """
+    Safely divide arrays with numerical stability.
+
+    Args:
+        numerator: Numerator array
+        denominator: Denominator array
+        epsilon: Small value to add for stability
+
+    Returns:
+        Division result with numerical stability
+    """
+    return numerator / (denominator + epsilon)
+
+
+def safe_log(x: np.ndarray, epsilon: float = 1e-8) -> np.ndarray:
+    """
+    Safely compute logarithm with numerical stability.
+
+    Args:
+        x: Input array
+        epsilon: Small value to clamp minimum
+
+    Returns:
+        Logarithm with numerical stability
+    """
+    return np.log(np.maximum(x, epsilon))
+
+
+def clip_values(x: np.ndarray, min_val: Optional[float] = None,
+               max_val: Optional[float] = None) -> np.ndarray:
+    """
+    Clip values to valid range.
+
+    Args:
+        x: Input array
+        min_val: Minimum value (None to skip)
+        max_val: Maximum value (None to skip)
+
+    Returns:
+        Clipped array
+    """
+    result = x.copy()
+
+    if min_val is not None:
+        result = np.maximum(result, min_val)
+
+    if max_val is not None:
+        result = np.minimum(result, max_val)
+
+    return result
+
+
+def validate_config(config: Dict[str, Any]) -> None:
+    """
+    Validate configuration dictionary.
+
+    Args:
+        config: Configuration dictionary to validate
+
+    Raises:
+        ValidationError: If configuration is invalid
+    """
+    if not isinstance(config, dict):
+        raise ValidationError("Configuration must be a dictionary")
+
+    # Validate required fields (basic validation)
+    required_fields = ['agent', 'environment']  # Basic requirements
+
+    for field in required_fields:
+        if field not in config:
+            raise ValidationError(f"Configuration missing required field: {field}")
+
+    # Validate agent configuration
+    if 'agent' in config:
+        agent_config = config['agent']
+        if isinstance(agent_config, dict):
+            # Validate dimensions
+            if 'state_dim' in agent_config:
+                validate_dimensions(
+                    agent_config.get('state_dim', 4),
+                    agent_config.get('obs_dim', 8),
+                    agent_config.get('action_dim', 2)
+                )
+
+
+class UnifiedValidationInterface:
+    """
+    Unified validation interface for the Active Inference framework.
+
+    Provides a single, consistent interface for all validation operations across
+    the framework, including input validation, security checks, performance
+    validation, and health monitoring.
+    """
+
+    _instance: Optional['UnifiedValidationInterface'] = None
+    _initialized = False
+
+    def __new__(cls) -> 'UnifiedValidationInterface':
+        """Singleton pattern for unified validation."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        """Initialize the unified validation interface."""
+        if not self._initialized:
+            self._advanced_validator: Optional[AdvancedValidator] = None
+            self._health_monitor: Optional[HealthMonitor] = None
+            self._security_monitor: Optional[SecurityMonitor] = None
+            self._robust_framework: Optional[RobustActiveInferenceFramework] = None
+            self._global_config = {
+                'strict_mode': True,
+                'enable_health_monitoring': True,
+                'enable_security_monitoring': True,
+                'health_check_interval': 10.0,
+                'max_memory_mb': 1000,
+                'max_data_size_mb': 100,
+                'security_level': 'medium'
+            }
+            self._initialized = True
+
+    def configure(self, **config) -> 'UnifiedValidationInterface':
+        """
+        Configure the unified validation interface.
+
+        Args:
+            **config: Configuration options including:
+                - strict_mode: Whether to use strict validation (raise exceptions)
+                - enable_health_monitoring: Whether to enable health monitoring
+                - enable_security_monitoring: Whether to enable security monitoring
+                - health_check_interval: Health check interval in seconds
+                - max_memory_mb: Maximum memory usage before alerts
+                - max_data_size_mb: Maximum data size for security checks
+                - security_level: Security validation strictness ('low', 'medium', 'high')
+
+        Returns:
+            Self for method chaining
+        """
+        self._global_config.update(config)
+
+        # Reinitialize with new configuration
+        self._initialize_validation_system()
+
+        return self
+
+    def _initialize_validation_system(self):
+        """Initialize the validation system with current configuration."""
+        # Initialize advanced validator
+        self._advanced_validator = AdvancedValidator(strict_mode=self._global_config['strict_mode'])
+
+        # Initialize health monitor if enabled
+        if self._global_config['enable_health_monitoring']:
+            self._health_monitor = HealthMonitor(self._global_config['health_check_interval'])
+            self._health_monitor.start_monitoring()
+        else:
+            self._health_monitor = None
+
+        # Initialize security monitor if enabled
+        if self._global_config['enable_security_monitoring']:
+            self._security_monitor = SecurityMonitor()
+        else:
+            self._security_monitor = None
+
+        # Initialize robust framework
+        self._robust_framework = RobustActiveInferenceFramework()
+
+    def validate(self, data: Any, validation_type: str, context: Optional[Dict[str, Any]] = None) -> ValidationResult:
+        """
+        Unified validation method.
+
+        Args:
+            data: Data to validate
+            validation_type: Type of validation ('array', 'model', 'agent', 'environment', 'performance')
+            context: Additional validation context
+
+        Returns:
+            ValidationResult with validation outcome
+        """
+        if not self._advanced_validator:
+            self._initialize_validation_system()
+
+        return self._advanced_validator.validate_comprehensive(data, validation_type, context or {})
+
+    def validate_array(self, arr: np.ndarray, name: str = "array",
+                      expected_shape: Optional[Tuple] = None,
+                      expected_dtype: Optional[np.dtype] = None,
+                      min_val: Optional[float] = None, max_val: Optional[float] = None,
+                      allow_nan: bool = False, allow_inf: bool = False) -> None:
+        """
+        Validate numpy array properties.
+
+        Args:
+            arr: Array to validate
+            name: Name for error messages
+            expected_shape: Expected shape
+            expected_dtype: Expected data type
+            min_val: Minimum allowed value
+            max_val: Maximum allowed value
+            allow_nan: Whether NaN values are allowed
+            allow_inf: Whether infinite values are allowed
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_array(arr, name, expected_shape, expected_dtype, min_val, max_val, allow_nan, allow_inf)
+
+    def validate_matrix(self, matrix: np.ndarray, name: str = "matrix",
+                       square: bool = False, positive_definite: bool = False,
+                       symmetric: bool = False) -> None:
+        """
+        Validate matrix properties.
+
+        Args:
+            matrix: Matrix to validate
+            name: Name for error messages
+            square: Whether matrix must be square
+            positive_definite: Whether matrix must be positive definite
+            symmetric: Whether matrix must be symmetric
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_matrix(matrix, name, square, positive_definite, symmetric)
+
+    def validate_belief_state(self, beliefs_dict: Dict[str, Any]) -> None:
+        """
+        Validate belief state dictionary.
+
+        Args:
+            beliefs_dict: Belief state to validate
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_belief_state(beliefs_dict)
+
+    def validate_dimensions(self, state_dim: int, obs_dim: int, action_dim: int) -> None:
+        """
+        Validate dimension parameters.
+
+        Args:
+            state_dim: State dimensionality
+            obs_dim: Observation dimensionality
+            action_dim: Action dimensionality
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_dimensions(state_dim, obs_dim, action_dim)
+
+    def validate_hyperparameters(self, **kwargs) -> None:
+        """
+        Validate hyperparameters.
+
+        Args:
+            **kwargs: Hyperparameters to validate
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_hyperparameters(**kwargs)
+
+    def validate_inputs(self, **kwargs) -> None:
+        """
+        General input validation.
+
+        Args:
+            **kwargs: Inputs to validate
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_inputs(**kwargs)
+
+    def validate_config(self, config: Dict[str, Any]) -> None:
+        """
+        Validate configuration dictionary.
+
+        Args:
+            config: Configuration to validate
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        validate_config(config)
+
+    def validate_security(self, input_data: str, source_ip: str = None) -> ValidationResult:
+        """
+        Validate input for security threats.
+
+        Args:
+            input_data: Input data to check
+            source_ip: Source IP address
+
+        Returns:
+            ValidationResult with security validation outcome
+        """
+        if not self._security_monitor:
+            # Fallback to basic security validation
+            from .advanced_validation import SecurityValidator
+            validator = SecurityValidator()
+            is_valid = validator.validate_input(input_data)
+            return ValidationResult(
+                is_valid=is_valid,
+                errors=["Security validation failed"] if not is_valid else []
+            )
+
+        return self._security_monitor.validate_input_security(input_data, source_ip)
+
+    def safe_operation(self, operation_name: str):
+        """
+        Decorator for safe operation execution with error handling.
+
+        Args:
+            operation_name: Name of the operation for logging
+
+        Returns:
+            Decorator function
+        """
+        def decorator(func):
+            return robust_execution(max_retries=2, fallback_value=None)(func)
+        return decorator
+
+    def handle_errors(self, error_types: Tuple = (Exception,),
+                     default_return=None, log_errors: bool = True):
+        """
+        Error handling decorator.
+
+        Args:
+            error_types: Exception types to handle
+            default_return: Default return value on error
+            log_errors: Whether to log errors
+
+        Returns:
+            Decorator function
+        """
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except error_types as e:
+                    if log_errors:
+                        get_unified_logger().error(f"Error in {func.__name__}: {str(e)}")
+
+                    if default_return is not None:
+                        return default_return
+                    else:
+                        raise
+                except Exception as e:
+                    if log_errors:
+                        get_unified_logger().error(f"Unexpected error in {func.__name__}: {str(e)}")
+                    raise
+
+            return wrapper
+        return decorator
+
+    def safe_divide(self, numerator: np.ndarray, denominator: np.ndarray,
+                   epsilon: float = 1e-8) -> np.ndarray:
+        """
+        Safely divide arrays with numerical stability.
+
+        Args:
+            numerator: Numerator array
+            denominator: Denominator array
+            epsilon: Stability epsilon
+
+        Returns:
+            Safely divided result
+        """
+        return safe_divide(numerator, denominator, epsilon)
+
+    def safe_log(self, x: np.ndarray, epsilon: float = 1e-8) -> np.ndarray:
+        """
+        Safely compute logarithm.
+
+        Args:
+            x: Input array
+            epsilon: Stability epsilon
+
+        Returns:
+            Safe logarithm result
+        """
+        return safe_log(x, epsilon)
+
+    def clip_values(self, x: np.ndarray, min_val: Optional[float] = None,
+                   max_val: Optional[float] = None) -> np.ndarray:
+        """
+        Clip array values to valid range.
+
+        Args:
+            x: Input array
+            min_val: Minimum value
+            max_val: Maximum value
+
+        Returns:
+            Clipped array
+        """
+        return clip_values(x, min_val, max_val)
+
+    def execute_safe_agent_operation(self, agent: Any, operation: str, *args, **kwargs) -> Dict[str, Any]:
+        """
+        Safely execute agent operation with comprehensive error handling.
+
+        Args:
+            agent: Agent instance
+            operation: Operation name
+            *args: Operation arguments
+            **kwargs: Operation keyword arguments
+
+        Returns:
+            Operation result dictionary
+        """
+        if not self._robust_framework:
+            self._initialize_validation_system()
+
+        return self._robust_framework.safe_agent_operation(agent, operation, *args, **kwargs)
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive system health status.
+
+        Returns:
+            Health status dictionary
+        """
+        if not self._health_monitor:
+            return {'status': 'health_monitoring_disabled'}
+
+        health_summary = self._health_monitor.get_health_summary()
+
+        # Add validation system health
+        if self._advanced_validator:
+            validation_stats = self._advanced_validator.get_validation_statistics()
+            health_summary['validation_stats'] = validation_stats
+
+        # Add security system health
+        if self._security_monitor:
+            security_summary = self._security_monitor.get_security_summary()
+            health_summary['security_stats'] = security_summary
+
+        return health_summary
+
+    def get_validation_statistics(self) -> Dict[str, Any]:
+        """
+        Get validation system statistics.
+
+        Returns:
+            Validation statistics dictionary
+        """
+        if not self._advanced_validator:
+            return {'status': 'validation_system_not_initialized'}
+
+        return self._advanced_validator.get_validation_statistics()
+
+    def get_security_statistics(self) -> Dict[str, Any]:
+        """
+        Get security monitoring statistics.
+
+        Returns:
+            Security statistics dictionary
+        """
+        if not self._security_monitor:
+            return {'status': 'security_monitoring_disabled'}
+
+        return self._security_monitor.get_security_summary()
+
+    def record_request_time(self, request_time: float):
+        """
+        Record request timing for health monitoring.
+
+        Args:
+            request_time: Request duration in seconds
+        """
+        if self._health_monitor:
+            self._health_monitor.record_request_time(request_time)
+
+    def record_error(self):
+        """Record an error occurrence for health monitoring."""
+        if self._health_monitor:
+            self._health_monitor.record_error()
+
+    def add_health_alert_callback(self, callback: Callable[[str, HealthMetrics], None]):
+        """
+        Add callback for health alerts.
+
+        Args:
+            callback: Callback function for health alerts
+        """
+        if self._health_monitor:
+            self._health_monitor.add_alert_callback(callback)
+
+    def is_ip_blocked(self, source_ip: str) -> bool:
+        """
+        Check if an IP address is blocked.
+
+        Args:
+            source_ip: IP address to check
+
+        Returns:
+            True if IP is blocked
+        """
+        if self._security_monitor:
+            return self._security_monitor.is_ip_blocked(source_ip)
+        return False
+
+    def unblock_ip(self, source_ip: str):
+        """
+        Unblock an IP address.
+
+        Args:
+            source_ip: IP address to unblock
+        """
+        if self._security_monitor:
+            self._security_monitor.unblock_ip(source_ip)
+
+    def shutdown(self):
+        """Shutdown the unified validation interface."""
+        if self._health_monitor:
+            self._health_monitor.stop_monitoring()
+
+        # Clear all components
+        self._advanced_validator = None
+        self._health_monitor = None
+        self._security_monitor = None
+        self._robust_framework = None
+        self._initialized = False
+        UnifiedValidationInterface._instance = None
+
+
+# Global unified validation instance
+_unified_validation_interface: Optional[UnifiedValidationInterface] = None
+
+
+def get_unified_validator() -> UnifiedValidationInterface:
+    """Get the unified validation interface instance."""
+    global _unified_validation_interface
+    if _unified_validation_interface is None:
+        _unified_validation_interface = UnifiedValidationInterface()
+        # Initialize with defaults
+        _unified_validation_interface._initialize_validation_system()
+    return _unified_validation_interface
+
+
+# Backward compatibility - create a default instance
+_unified_validator = get_unified_validator()
+
+
+def validate_secure(data: Any, validation_type: str, context: Optional[Dict[str, Any]] = None) -> ValidationResult:
+    """Convenience function for secure validation."""
+    return _unified_validator.validate(data, validation_type, context)
+
+
+def validate_secure_array(arr: np.ndarray, **kwargs):
+    """Convenience function for secure array validation."""
+    return _unified_validator.validate_array(arr, **kwargs)
+
+
+def safe_execute_agent_operation(agent: Any, operation: str, *args, **kwargs) -> Dict[str, Any]:
+    """Convenience function for safe agent operations."""
+    return _unified_validator.execute_safe_agent_operation(agent, operation, *args, **kwargs)
+
+
+# Add backward compatibility imports
+__all__ = [
+    # Unified validation interface
+    'UnifiedValidationInterface',
+    'get_unified_validator',
+    'validate_secure',
+    'validate_secure_array',
+    'safe_execute_agent_operation',
+
+    # Advanced validation classes
+    'AdvancedValidator',
+    'HealthMonitor',
+    'SecurityMonitor',
+    'RobustActiveInferenceFramework',
+    'ValidationResult',
+    'HealthMetrics',
+    'SecurityEvent',
+    'ValidationException',
+    'SecurityException',
+    'PerformanceException',
+    'robust_execution',
+    'error_recovery_context',
+
+    # Backward compatibility classes and functions
+    'ValidationError',
+    'ActiveInferenceError',
+    'ModelError',
+    'InferenceError',
+    'PlanningError',
+    'SecurityValidator',
+    'AdvancedInputValidator',
+    'validate_array',
+    'validate_matrix',
+    'validate_probability_distribution',
+    'validate_belief_state',
+    'validate_dimensions',
+    'validate_hyperparameters',
+    'validate_inputs',
+    'validate_config',
+    'handle_errors',
+    'safe_divide',
+    'safe_log',
+    'clip_values'
+]

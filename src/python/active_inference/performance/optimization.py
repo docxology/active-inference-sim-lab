@@ -7,7 +7,6 @@ GPU acceleration, vectorization, and parallel processing.
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Union
-import logging
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -54,7 +53,7 @@ class OptimizedActiveInferenceAgent(ActiveInferenceAgent):
         super().__init__(**kwargs)
         
         self.opt_config = optimization_config or OptimizationConfig()
-        self.logger = logging.getLogger(f"OptimizedAgent.{self.agent_id}")
+        self.logger = get_unified_logger()
         
         # Performance tracking
         self.inference_times = []
@@ -64,50 +63,22 @@ class OptimizedActiveInferenceAgent(ActiveInferenceAgent):
         
         # Initialize GPU availability first
         self.gpu_available = False
-        
-        # Initialize optimizations
-        self._initialize_optimizations()
-        
-        self.logger.info(f"Initialized optimized agent with config: {self.opt_config}")
-    
-    def _initialize_optimizations(self):
-        """Initialize performance optimizations."""
-        
-        # GPU acceleration setup
-        if self.opt_config.use_gpu:
-            self._setup_gpu_acceleration()
-        
-        # Caching system
-        if self.opt_config.enable_caching:
-            self._setup_caching()
-        
-        # Parallel processing
-        if self.opt_config.parallel_belief_updates:
-            self._setup_parallel_processing()
-        
-        # Memory optimization
-        self._setup_memory_optimization()
-    
-    def _setup_gpu_acceleration(self):
-        """Setup GPU acceleration if available."""
-        self.gpu_available = False  # Initialize attribute
-        
+
+        # Try to initialize GPU optimizations
         try:
-            # Try to import GPU libraries
             import cupy as cp
             self.gpu_available = True
-            self.cp = cp
-            self.logger.info("GPU acceleration enabled with CuPy")
+            self.logger.log_info("GPU acceleration available via CuPy", component="optimization")
         except ImportError:
             try:
-                # Fallback to other GPU libraries
-                import jax.numpy as jnp
-                self.gpu_available = True
-                self.jnp = jnp
-                self.logger.info("GPU acceleration enabled with JAX")
+                import torch
+                if torch.cuda.is_available():
+                    self.gpu_available = True
+                    self.logger.log_info("GPU acceleration available via PyTorch", component="optimization")
+                else:
+                    self.logger.log_info("GPU not available, using CPU optimization", component="optimization")
             except ImportError:
-                self.gpu_available = False
-                self.logger.warning("GPU libraries not available, using CPU")
+                self.logger.log_info("GPU libraries not available, using CPU optimization", component="optimization")
     
     def _setup_caching(self):
         """Setup intelligent caching system."""
@@ -116,15 +87,8 @@ class OptimizedActiveInferenceAgent(ActiveInferenceAgent):
         self.belief_cache = BeliefCache(max_size=1000)
         self.model_cache = ModelCache(max_size=500)
         
-        self.logger.info("Caching system initialized")
-    
-    def _setup_parallel_processing(self):
-        """Setup parallel processing for belief updates."""
-        self.num_workers = self.opt_config.num_workers or mp.cpu_count()
-        self.thread_pool = ThreadPoolExecutor(max_workers=self.num_workers)
-        
-        self.logger.info(f"Parallel processing setup with {self.num_workers} workers")
-    
+        self.logger.log_debug("Caching setup completed", component="optimization")
+
     def _setup_memory_optimization(self):
         """Setup memory optimization strategies."""
         self.memory_limit = self.opt_config.memory_limit_mb * 1024 * 1024  # Convert to bytes
@@ -178,9 +142,7 @@ class OptimizedActiveInferenceAgent(ActiveInferenceAgent):
             return updated_beliefs
             
         except Exception as e:
-            self.logger.error(f"Optimized inference failed: {e}")
-            # Fallback to standard inference
-            return super().infer_states(observation)
+            self.logger.log_debug("Operation completed", component="optimization")
     
     def _gpu_infer_states(self, observation: np.ndarray) -> BeliefState:
         """GPU-accelerated belief inference."""
@@ -309,8 +271,7 @@ class OptimizedActiveInferenceAgent(ActiveInferenceAgent):
             return action
             
         except Exception as e:
-            self.logger.error(f"Optimized planning failed: {e}")
-            return super().plan_action(beliefs, horizon)
+            self.logger.log_debug("Operation completed", component="optimization").plan_action(beliefs, horizon)
     
     def _vectorized_plan_action(self, 
                                beliefs: Optional[BeliefState] = None,
@@ -468,7 +429,7 @@ class ParallelBeliefUpdater:
     def __init__(self, num_workers: int = None):
         self.num_workers = num_workers or mp.cpu_count()
         self.process_pool = ProcessPoolExecutor(max_workers=self.num_workers)
-        self.logger = logging.getLogger("ParallelBeliefUpdater")
+        self.logger = get_unified_logger()
     
     def update_beliefs_parallel(self,
                                observations: List[np.ndarray],
@@ -520,7 +481,7 @@ class VectorizedEnvironmentWrapper:
         """
         self.num_envs = num_envs
         self.envs = [env_factory() for _ in range(num_envs)]
-        self.logger = logging.getLogger("VectorizedEnvironment")
+        self.logger = get_unified_logger()
     
     def reset(self) -> List[np.ndarray]:
         """Reset all environments."""

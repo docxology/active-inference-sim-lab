@@ -4,13 +4,12 @@ Generation 3: MAKE IT SCALE (Optimized)
 """
 
 import numpy as np
-import logging
 import time
 from typing import Dict, Any, Optional, List, Union, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 @dataclass

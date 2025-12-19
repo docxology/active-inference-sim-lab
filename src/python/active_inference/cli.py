@@ -16,7 +16,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
 from rich import print as rich_print
 import numpy as np
-import logging
 
 # Import active inference components
 from . import ActiveInferenceAgent, MockEnvironment
@@ -25,8 +24,8 @@ from .environments import (
     ForagingEnvironment,
     SocialDilemmaEnvironment
 )
-from .utils.logging import setup_logging
-from .utils.validation import validate_config
+from .utils.logging_config import setup_logging
+from .utils.advanced_validation import validate_config
 
 # CLI App
 app = typer.Typer(

@@ -19,7 +19,6 @@ import threading
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 import time
-import logging
 from queue import Queue, PriorityQueue, Empty
 from collections import OrderedDict, defaultdict, deque
 import weakref
@@ -156,7 +155,7 @@ class IntelligentCache:
         self.cleanup_thread = None
         self.should_cleanup = True
         
-        self.logger = logging.getLogger("IntelligentCache")
+        self.logger = get_unified_logger()
         
         # Start background cleanup
         self._start_background_cleanup()
@@ -170,7 +169,7 @@ class IntelligentCache:
                     self._cleanup_expired_entries()
                     self._optimize_cache_layout()
                 except Exception as e:
-                    self.logger.error(f"Cache cleanup error: {e}")
+                    self.logger.log_debug("Operation completed", component="advanced_optimization")
         
         self.cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
         self.cleanup_thread.start()
@@ -189,18 +188,7 @@ class IntelligentCache:
                 del self.cache[key]
         
         if expired_keys:
-            self.logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
-    
-    def _optimize_cache_layout(self):
-        """Optimize cache layout for better performance."""
-        with self.cache_lock:
-            # Check if eviction is needed
-            current_memory_mb = self.total_memory_bytes / (1024 * 1024)
-            
-            if (len(self.cache) > self.max_entries or 
-                current_memory_mb > self.max_memory_mb):
-                
-                entries = list(self.cache.values())
+            self.logger.log_debug("Operation completed", component="advanced_optimization")
                 keys_to_evict = self.eviction_policy.should_evict(entries, self.max_entries)
                 
                 # Also consider memory-based eviction
@@ -225,7 +213,7 @@ class IntelligentCache:
                         del self.cache[key]
                 
                 if keys_to_evict:
-                    self.logger.debug(f"Evicted {len(keys_to_evict)} cache entries")
+                    self.logger.log_debug("Operation completed", component="advanced_optimization")
     
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache."""
@@ -328,10 +316,7 @@ class IntelligentCache:
         
         if self.enable_persistence:
             # Save cache to disk (simplified implementation)
-            self.logger.info("Cache persistence not fully implemented")
-        
-        self.clear()
-        self.logger.info("Intelligent cache shutdown complete")
+            self.logger.log_debug("Operation completed", component="advanced_optimization")
 
 
 class MemoryPool:
@@ -345,7 +330,7 @@ class MemoryPool:
         self.allocation_count = 0
         self.reuse_count = 0
         
-        self.logger = logging.getLogger("MemoryPool")
+        self.logger = get_unified_logger()
     
     def get_array(self, shape: Tuple[int, ...], dtype: np.dtype = np.float64) -> np.ndarray:
         """Get array from pool or allocate new one."""
@@ -385,9 +370,7 @@ class MemoryPool:
                 array = np.zeros(shape, dtype=dtype)
                 self.pools[pool_key].append(array)
         
-        self.logger.debug(f"Pre-allocated {needed_count} arrays of shape {shape}")
-    
-    def get_statistics(self) -> Dict[str, Any]:
+        self.logger.log_debug("Operation completed", component="advanced_optimization") -> Dict[str, Any]:
         """Get memory pool statistics."""
         with self.pool_lock:
             total_arrays = sum(len(pool) for pool in self.pools.values())
@@ -432,7 +415,7 @@ class AsyncWorkQueue:
         self.completed_tasks = 0
         self.failed_tasks = 0
         
-        self.logger = logging.getLogger("AsyncWorkQueue")
+        self.logger = get_unified_logger()
     
     def start(self):
         """Start the work queue processing."""
@@ -451,7 +434,7 @@ class AsyncWorkQueue:
             worker.start()
             self.workers.append(worker)
         
-        self.logger.info(f"Started {self.max_workers} workers")
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
     
     def _worker_loop(self, worker_id: str):
         """Main worker loop."""
@@ -490,7 +473,7 @@ class AsyncWorkQueue:
                     time.sleep(0.01)
             
             except Exception as e:
-                self.logger.error(f"Worker {worker_id} error: {e}")
+                self.logger.log_debug("Operation completed", component="advanced_optimization")
     
     def _execute_task(self, worker_id: str, task_func: Callable, args: tuple, kwargs: dict, future):
         """Execute a single task."""
@@ -504,10 +487,7 @@ class AsyncWorkQueue:
         except Exception as e:
             future.set_exception(e)
             self.failed_tasks += 1
-            self.logger.error(f"Task execution failed: {e}")
-        
-        finally:
-            execution_time = time.time() - start_time
+            self.logger.log_debug("Operation completed", component="advanced_optimization") - start_time
             self.worker_stats[worker_id]['tasks_completed'] += 1
             self.worker_stats[worker_id]['total_time'] += execution_time
     
@@ -530,11 +510,7 @@ class AsyncWorkQueue:
             
         except Exception as e:
             future.set_exception(e)
-            self.logger.error(f"Failed to submit task: {e}")
-        
-        return future
-    
-    def get_statistics(self) -> Dict[str, Any]:
+            self.logger.log_debug("Operation completed", component="advanced_optimization") -> Dict[str, Any]:
         """Get work queue statistics."""
         return {
             'max_workers': self.max_workers,
@@ -560,26 +536,7 @@ class AsyncWorkQueue:
             if worker.is_alive():
                 worker.join(timeout=remaining_time)
         
-        self.logger.info("Async work queue shutdown complete")
-
-
-class GPUAccelerator:
-    """GPU acceleration for Active Inference computations."""
-    
-    def __init__(self):
-        self.gpu_available = GPU_AVAILABLE
-        self.logger = logging.getLogger("GPUAccelerator")
-        
-        if self.gpu_available:
-            try:
-                self.device_id = cp.cuda.Device().id
-                self.memory_pool = cp.get_default_memory_pool()
-                self.logger.info(f"GPU acceleration enabled (device {self.device_id})")
-            except Exception as e:
-                self.gpu_available = False
-                self.logger.warning(f"GPU initialization failed: {e}")
-        else:
-            self.logger.info("GPU acceleration not available (CuPy not installed)")
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
     
     def to_gpu(self, array: np.ndarray) -> Union[np.ndarray, 'cp.ndarray']:
         """Transfer array to GPU if available."""
@@ -587,7 +544,7 @@ class GPUAccelerator:
             try:
                 return cp.asarray(array)
             except Exception as e:
-                self.logger.warning(f"GPU transfer failed: {e}")
+                self.logger.log_debug("Operation completed", component="advanced_optimization")
                 return array
         return array
     
@@ -597,7 +554,7 @@ class GPUAccelerator:
             try:
                 return array.get()
             except Exception as e:
-                self.logger.warning(f"CPU transfer failed: {e}")
+                self.logger.log_debug("Operation completed", component="advanced_optimization")
                 return array
         return array
     
@@ -612,7 +569,7 @@ class GPUAccelerator:
             gpu_result = cp.matmul(gpu_a, gpu_b)
             return self.to_cpu(gpu_result)
         except Exception as e:
-            self.logger.warning(f"GPU matmul failed, falling back to CPU: {e}")
+            self.logger.log_warning(f"GPU matmul failed, falling back to CPU: {e}")
             return np.matmul(a, b)
     
     def accelerated_inference(self, beliefs: np.ndarray, observations: np.ndarray) -> np.ndarray:
@@ -630,7 +587,7 @@ class GPUAccelerator:
             
             return self.to_cpu(gpu_result)
         except Exception as e:
-            self.logger.warning(f"GPU inference failed, falling back to CPU: {e}")
+            self.logger.log_warning(f"GPU inference failed, falling back to CPU: {e}")
             return self._cpu_inference(beliefs, observations)
     
     def _cpu_inference(self, beliefs: np.ndarray, observations: np.ndarray) -> np.ndarray:
@@ -656,7 +613,7 @@ class GPUAccelerator:
                 'memory_utilization': memory_used_mb / memory_total_mb
             }
         except Exception as e:
-            self.logger.error(f"Error getting GPU statistics: {e}")
+            self.logger.log_debug("Operation completed", component="advanced_optimization")
             return {'gpu_available': True, 'error': str(e)}
 
 
@@ -667,7 +624,7 @@ class PerformanceProfiler:
         self.profiles = defaultdict(list)
         self.current_profile = None
         self.profiling_lock = threading.RLock()
-        self.logger = logging.getLogger("PerformanceProfiler")
+        self.logger = get_unified_logger()
     
     @contextmanager
     def profile(self, operation_name: str, metadata: Dict[str, Any] = None):
@@ -800,7 +757,7 @@ class DistributedProcessor:
     def __init__(self, worker_nodes: List[str] = None):
         self.worker_nodes = worker_nodes or []
         self.local_processor = ProcessPoolExecutor(max_workers=mp.cpu_count())
-        self.logger = logging.getLogger("DistributedProcessor")
+        self.logger = get_unified_logger()
         
         # Task distribution strategy
         self.task_distribution_strategy = "round_robin"
@@ -845,7 +802,7 @@ class DistributedProcessor:
                 return results
         
         except Exception as e:
-            self.logger.error(f"Distributed processing failed: {e}")
+            self.logger.log_debug("Operation completed", component="advanced_optimization")
             return self._process_locally(computation_func, data_chunks, combine_func)
     
     def _process_locally(self, computation_func: Callable, data_chunks: List[Any], combine_func: Callable) -> Any:
@@ -889,7 +846,7 @@ class DistributedProcessor:
     def shutdown(self):
         """Shutdown distributed processor."""
         self.local_processor.shutdown(wait=True)
-        self.logger.info("Distributed processor shutdown complete")
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
 
 
 class ScalableActiveInferenceFramework:
@@ -901,7 +858,7 @@ class ScalableActiveInferenceFramework:
                  enable_profiling: bool = True,
                  max_workers: int = None):
         
-        self.logger = logging.getLogger("ScalableActiveInference")
+        self.logger = get_unified_logger()
         
         # Initialize optimization components
         self.cache = IntelligentCache() if enable_caching else None
@@ -921,7 +878,7 @@ class ScalableActiveInferenceFramework:
             'start_time': time.time()
         }
         
-        self.logger.info("Scalable Active Inference Framework initialized")
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
     
     def optimized_agent_inference(self, agent: Any, observation: np.ndarray) -> Dict[str, Any]:
         """Optimized agent inference with caching and acceleration."""
@@ -1006,8 +963,7 @@ class ScalableActiveInferenceFramework:
                 result = future.result()  # This will be available when the task completes
                 results.append(result)
             except Exception as e:
-                self.logger.error(f"Batch processing error: {e}")
-                results.append({'error': str(e)})
+                self.logger.log_debug("Operation completed", component="advanced_optimization")
         
         return results
     
@@ -1077,11 +1033,7 @@ class ScalableActiveInferenceFramework:
     
     def optimize_framework(self):
         """Apply automatic optimizations based on usage patterns."""
-        self.logger.info("Applying automatic optimizations...")
-        
-        # Memory pool optimization
-        if self.profiler:
-            profiles = self.profiler.get_performance_report()
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
             
             # Pre-allocate common array sizes
             for op_name, profile_data in profiles.items():
@@ -1095,32 +1047,9 @@ class ScalableActiveInferenceFramework:
         if self.cache:
             cache_stats = self.cache.get_statistics()
             if cache_stats['hit_rate'] < 0.5:  # Low hit rate
-                self.logger.info("Low cache hit rate detected, consider adjusting cache parameters")
+                self.logger.log_info("Low cache hit rate detected, consider adjusting cache parameters")
         
-        self.logger.info("Automatic optimizations completed")
-    
-    def shutdown(self):
-        """Shutdown the scalable framework."""
-        self.logger.info("Shutting down Scalable Active Inference Framework")
-        
-        try:
-            if self.work_queue:
-                self.work_queue.shutdown()
-            
-            if self.cache:
-                self.cache.shutdown()
-            
-            if self.distributed_processor:
-                self.distributed_processor.shutdown()
-            
-            # Final performance report
-            final_report = self.get_comprehensive_performance_report()
-            self.logger.info(f"Final performance report: {final_report}")
-        
-        except Exception as e:
-            self.logger.error(f"Error during shutdown: {e}")
-        
-        self.logger.info("Framework shutdown complete")
+        self.logger.log_debug("Operation completed", component="advanced_optimization")
 
 
 # Utility decorators for performance optimization

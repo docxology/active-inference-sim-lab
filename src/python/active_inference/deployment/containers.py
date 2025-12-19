@@ -6,7 +6,6 @@ management for production Active Inference systems.
 """
 
 import docker
-import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +14,7 @@ import psutil
 import threading
 
 
-logger = logging.getLogger(__name__)
+logger = get_unified_logger()
 
 
 @dataclass

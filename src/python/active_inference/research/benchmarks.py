@@ -9,10 +9,11 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Callable, Union
 from dataclasses import dataclass, field
 import time
-import logging
 from abc import ABC, abstractmethod
 import json
 from pathlib import Path
+
+from ..utils.logging_config import get_unified_logger
 
 from ..core.agent import ActiveInferenceAgent
 from .validation import ValidationResult
@@ -41,7 +42,7 @@ class AXIOMBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("AXIOMBenchmark")
+        self.logger = get_unified_logger()
         
         # AXIOM target performance from paper
         self.axiom_targets = {
@@ -188,7 +189,7 @@ class ComparativeBenchmark:
     """
     
     def __init__(self):
-        self.logger = logging.getLogger("ComparativeBenchmark")
+        self.logger = get_unified_logger()
         
         # Known baseline performances (from literature)
         self.baselines = {
@@ -325,7 +326,7 @@ class SampleEfficiencyBenchmark:
     """Dedicated benchmark for measuring sample efficiency."""
     
     def __init__(self):
-        self.logger = logging.getLogger("SampleEfficiencyBenchmark")
+        self.logger = get_unified_logger()
     
     def measure_learning_curve(self,
                               agent: ActiveInferenceAgent,
@@ -460,7 +461,7 @@ class ReproducibilityBenchmark:
     """Benchmark for testing reproducibility and statistical significance."""
     
     def __init__(self):
-        self.logger = logging.getLogger("ReproducibilityBenchmark")
+        self.logger = get_unified_logger()
     
     def test_reproducibility(self,
                            agent_factory: Callable[[], ActiveInferenceAgent],
@@ -575,7 +576,7 @@ class BenchmarkSuite:
     """Comprehensive benchmark suite for Active Inference agents."""
     
     def __init__(self):
-        self.logger = logging.getLogger("BenchmarkSuite")
+        self.logger = get_unified_logger()
         self.results: List[BenchmarkResult] = []
     
     def run_full_benchmark(self,

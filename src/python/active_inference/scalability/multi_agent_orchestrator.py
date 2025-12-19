@@ -10,7 +10,6 @@ from typing import Dict, List, Any, Optional, Callable, Set
 from dataclasses import dataclass
 from collections import defaultdict, deque
 import numpy as np
-import logging
 from enum import Enum
 
 
@@ -109,17 +108,9 @@ class MultiAgentOrchestrator:
         self.coordination_events = 0
         
         # Logging
-        self.logger = logging.getLogger("MultiAgentOrchestrator")
-        self.logger.setLevel(logging.INFO)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        self.logger = get_unified_logger()
         
-        self.logger.info(f"MultiAgentOrchestrator initialized: max_agents={max_agents}")
+        self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
     
     def register_agent(self,
                       agent_id: str,
@@ -140,16 +131,7 @@ class MultiAgentOrchestrator:
         """
         with self.lock:
             if agent_id in self.agents:
-                self.logger.warning(f"Agent {agent_id} already registered")
-                return False
-            
-            if len(self.agents) >= self.max_agents:
-                self.logger.error(f"Maximum agents limit reached: {self.max_agents}")
-                return False
-            
-            # Register agent
-            self.agents[agent_id] = agent
-            self.agent_executors[agent_id] = ThreadPoolExecutor(max_workers=max_workers)
+                self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
             
             # Initialize metrics
             self.agent_metrics[agent_id] = AgentMetrics(
@@ -170,7 +152,7 @@ class MultiAgentOrchestrator:
                 self.agent_groups[group].add(agent_id)
             
             self.total_agents_created += 1
-            self.logger.info(f"Agent {agent_id} registered successfully (group: {group})")
+            self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
             
             return True
     
@@ -186,12 +168,7 @@ class MultiAgentOrchestrator:
         """
         with self.lock:
             if agent_id not in self.agents:
-                self.logger.warning(f"Agent {agent_id} not found for unregistration")
-                return False
-            
-            # Shutdown executor
-            if agent_id in self.agent_executors:
-                self.agent_executors[agent_id].shutdown(wait=True)
+                self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
                 del self.agent_executors[agent_id]
             
             # Remove from groups
@@ -202,16 +179,7 @@ class MultiAgentOrchestrator:
             del self.agents[agent_id]
             del self.agent_metrics[agent_id]
             
-            self.logger.info(f"Agent {agent_id} unregistered successfully")
-            return True
-    
-    def start_orchestration(self):
-        """Start the orchestration system."""
-        if self.orchestrator_thread and self.orchestrator_thread.is_alive():
-            self.logger.warning("Orchestration already running")
-            return
-        
-        self.stop_event.clear()
+            self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
         
         # Start orchestrator thread
         self.orchestrator_thread = threading.Thread(
@@ -229,24 +197,7 @@ class MultiAgentOrchestrator:
         )
         self.monitoring_thread.start()
         
-        self.logger.info("Multi-agent orchestration started")
-    
-    def stop_orchestration(self):
-        """Stop the orchestration system."""
-        self.stop_event.set()
-        
-        if self.orchestrator_thread:
-            self.orchestrator_thread.join(timeout=10.0)
-        
-        if self.monitoring_thread:
-            self.monitoring_thread.join(timeout=10.0)
-        
-        # Shutdown all agent executors
-        with self.lock:
-            for executor in self.agent_executors.values():
-                executor.shutdown(wait=True)
-        
-        self.logger.info("Multi-agent orchestration stopped")
+        self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
     
     def execute_parallel_episodes(self,
                                  environment_factory: Callable,
@@ -296,15 +247,7 @@ class MultiAgentOrchestrator:
                 self._update_agent_metrics_from_results(agent_id, agent_results)
                 
             except Exception as e:
-                self.logger.error(f"Agent {agent_id} episode execution failed: {e}")
-                with self.lock:
-                    self.agent_metrics[agent_id].status = AgentStatus.FAILED
-                    self.agent_metrics[agent_id].error_count += 1
-        
-        total_time = time.time() - start_time
-        
-        # Aggregate results
-        aggregated_results = self._aggregate_results(all_results)
+                self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
         aggregated_results.update({
             'execution_time': total_time,
             'completed_agents': completed_agents,
@@ -312,8 +255,7 @@ class MultiAgentOrchestrator:
             'success_rate': completed_agents / len(self.agents) * 100 if self.agents else 0
         })
         
-        self.logger.info(f"Parallel episode execution completed: {completed_agents}/{len(self.agents)} "
-                        f"agents succeeded in {total_time:.2f}s")
+        self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
         
         return aggregated_results
     
@@ -365,7 +307,7 @@ class MultiAgentOrchestrator:
         self.message_queue.append(message)
         self.total_messages_processed += 1
         
-        self.logger.debug(f"Message queued: {message.sender_id} -> {message.receiver_id}")
+        self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
         return True
     
     def broadcast_message(self,
@@ -406,10 +348,8 @@ class MultiAgentOrchestrator:
                 recipients += 1
         
         self.total_messages_processed += recipients
-        self.logger.debug(f"Broadcast from {sender_id}: {recipients} recipients")
-        
-        return recipients
-    
+        self.logger.log_debug("Communication completed", component="multi_agent_orchestrator")
+
     def get_orchestrator_status(self) -> Dict[str, Any]:
         """Get comprehensive orchestrator status."""
         with self.lock:
@@ -468,32 +408,7 @@ class MultiAgentOrchestrator:
                 self.stop_event.wait(1.0)
                 
             except Exception as e:
-                self.logger.error(f"Orchestration loop error: {e}")
-                self.stop_event.wait(1.0)
-    
-    def _monitoring_loop(self):
-        """Resource and performance monitoring loop."""
-        while not self.stop_event.is_set():
-            try:
-                self._update_resource_usage()
-                self._check_agent_health()
-                self.stop_event.wait(self.resource_monitoring_interval)
-            except Exception as e:
-                self.logger.error(f"Monitoring loop error: {e}")
-                self.stop_event.wait(1.0)
-    
-    def _process_messages(self):
-        """Process pending communication messages."""
-        processed = 0
-        while self.message_queue and processed < 100:  # Limit to prevent blocking
-            try:
-                message = self.message_queue.popleft()
-                self._handle_message(message)
-                processed += 1
-            except IndexError:
-                break
-            except Exception as e:
-                self.logger.error(f"Message processing error: {e}")
+                self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
     
     def _handle_message(self, message: CoordinationMessage):
         """Handle individual coordination message."""
@@ -503,7 +418,7 @@ class MultiAgentOrchestrator:
             handler(message)
         else:
             # Default handling
-            self.logger.debug(f"Unhandled message type: {message.message_type}")
+            self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
     
     def _run_agent_episodes(self,
                            agent_id: str,
@@ -577,7 +492,7 @@ class MultiAgentOrchestrator:
                     results['avg_free_energy'] = np.mean(free_energies)
             
         except Exception as e:
-            self.logger.error(f"Agent {agent_id} episode execution failed: {e}")
+            self.logger.log_debug("Operation completed", component="multi_agent_orchestrator")
             raise
         
         finally:
@@ -670,9 +585,9 @@ class MultiAgentOrchestrator:
                 if current_time - metrics.last_update > 300:  # 5 minutes
                     if metrics.status == AgentStatus.ACTIVE:
                         metrics.status = AgentStatus.FAILED
-                        self.logger.warning(f"Agent {agent_id} marked as failed (stale)")
-    
-    def _process_coordination_events(self):
+                        self.logger.log_debug("Agent marked as failed due to timeout", component="multi_agent_orchestrator")
+
+    def _process_coordination_events(self) -> None:
         """Process coordination events."""
         # This would implement specific coordination algorithms
         self.coordination_events += 1

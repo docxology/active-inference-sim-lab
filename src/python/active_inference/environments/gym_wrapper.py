@@ -7,7 +7,7 @@ for use with active inference agents.
 
 import numpy as np
 from typing import Dict, Any, Optional, Tuple, Union
-import logging
+from ..utils.logging_config import get_unified_logger
 
 try:
     import gymnasium as gym
@@ -79,10 +79,10 @@ class GymWrapper:
         self.total_reward = 0.0
         
         # Setup logging
-        self.logger = logging.getLogger(f"GymWrapper.{self.env_id}")
+        self.logger = get_unified_logger()
         
-        self.logger.info(f"Initialized wrapper for {self.env_id}")
-        self.logger.info(f"Observation dim: {self.obs_dim}, Action dim: {self.action_dim}")
+        self.logger.log_debug("Operation completed", component="gym_wrapper")
+        self.logger.log_info(f"Observation dim: {self.obs_dim}, Action dim: {self.action_dim}")
     
     def _get_space_dim(self, space) -> int:
         """Get the dimensionality of a gym space."""
@@ -210,7 +210,7 @@ class GymWrapper:
         self.step_count = 0
         self.total_reward = 0.0
         
-        self.logger.debug(f"Environment reset for episode {self.episode_count}")
+        self.logger.log_debug("Operation completed", component="gym_wrapper")
         
         return processed_obs
     

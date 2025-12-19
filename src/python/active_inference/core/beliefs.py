@@ -8,11 +8,10 @@ uncertainty quantification and belief updating mechanics.
 import numpy as np
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass
-import logging
 import warnings
 import traceback
 
-from ..utils.validation import (
+from ..utils.advanced_validation import (
     ValidationError, ActiveInferenceError,
     validate_array, validate_matrix, validate_inputs, handle_errors,
     safe_log, safe_divide, clip_values
@@ -349,18 +348,18 @@ class BeliefState:
             self._last_error = None
             
             # Setup logging
-            self.logger = logging.getLogger("BeliefState")
+            self.logger = get_unified_logger()
             
         except Exception as e:
             raise ValidationError(f"Failed to initialize BeliefState: {e}")
     
     def add_belief(self, name: str, belief: Belief) -> None:
         """Add a named belief to the state.
-        
+
         Args:
             name: Name for the belief
             belief: Belief object to add
-            
+
         Raises:
             ValidationError: If inputs are invalid
         """
@@ -368,18 +367,17 @@ class BeliefState:
             # Validate inputs
             if not isinstance(name, str) or not name.strip():
                 raise ValidationError("Belief name must be a non-empty string")
-            
+
             if not isinstance(belief, Belief):
                 raise ValidationError(f"Expected Belief object, got {type(belief)}")
-            
+
             # Check if belief is valid
             if not belief.is_valid():
                 raise ValidationError(f"Invalid belief for '{name}': belief failed validation")
-            
+
             # Store the belief
             self._beliefs[name.strip()] = belief
-            self.logger.debug(f"Added belief '{name}' with shape {belief.mean.shape}")
-            
+
         except ValidationError:
             self._record_error("add_belief", name)
             raise
@@ -407,7 +405,6 @@ class BeliefState:
             
             # Validate belief if found
             if belief is not None and not belief.is_valid():
-                self.logger.warning(f"Retrieved belief '{name}' is invalid")
                 return None
             
             return belief
@@ -417,7 +414,6 @@ class BeliefState:
             raise
         except Exception as e:
             self._record_error("get_belief", name)
-            self.logger.error(f"Error getting belief '{name}': {e}")
             return None
     
     def update_belief(self, name: str, new_mean: np.ndarray, 
@@ -463,10 +459,6 @@ class BeliefState:
             # Update existing or add new
             if name in self._beliefs:
                 self._beliefs[name] = new_belief
-                self.logger.debug(f"Updated belief '{name}'")
-            else:
-                self._beliefs[name] = new_belief
-                self.logger.debug(f"Added new belief '{name}'")
                 
         except ValidationError:
             self._record_error("update_belief", name)
@@ -477,65 +469,29 @@ class BeliefState:
     
     def get_all_beliefs(self) -> Dict[str, Belief]:
         """Get all beliefs in the state.
-        
+
         Returns:
             Copy of all beliefs dictionary
         """
         try:
             # Validate all beliefs before returning
             valid_beliefs = {}
-            invalid_beliefs = []
-            
+
             for name, belief in self._beliefs.items():
                 if belief.is_valid():
                     valid_beliefs[name] = belief
                 else:
-                    invalid_beliefs.append(name)
-                    self.logger.warning(f"Belief '{name}' is invalid, excluding from results")
-            
-            if invalid_beliefs:
-                self.logger.warning(f"Found {len(invalid_beliefs)} invalid beliefs: {invalid_beliefs}")
-            
+                    self.logger.log_warning(f"Belief '{name}' is invalid, excluding from results", component="beliefs")
+
             return valid_beliefs.copy()
-            
+
         except Exception as e:
-            self.logger.error(f"Error getting all beliefs: {e}")
-            # Return empty dict as fallback
+            self._record_error("get_all_beliefs", "validation")
             return {}
-    
-    def total_entropy(self) -> float:
-        """Compute total entropy across all beliefs.
-        
-        Returns:
-            Total entropy (non-negative)
-        """
-        try:
-            if not self._beliefs:
-                return 0.0
-            
-            total = 0.0
-            valid_count = 0
-            
-            for name, belief in self._beliefs.items():
-                if belief.is_valid():
-                    entropy = belief.entropy
-                    if not (np.isnan(entropy) or np.isinf(entropy)):
-                        total += entropy
-                        valid_count += 1
-                    else:
-                        self.logger.warning(f"Belief '{name}' has invalid entropy: {entropy}")
-                else:
-                    self.logger.warning(f"Belief '{name}' is invalid, skipping entropy calculation")
-            
-            return max(0.0, total)
-            
-        except Exception as e:
-            self.logger.error(f"Error computing total entropy: {e}")
-            return 0.0
-    
-    def average_confidence(self) -> float:
+
+    def get_average_confidence(self) -> float:
         """Compute average confidence across all beliefs.
-        
+
         Returns:
             Average confidence between 0 and 1
         """
@@ -550,10 +506,8 @@ class BeliefState:
                     confidence = belief.confidence
                     if not (np.isnan(confidence) or np.isinf(confidence)):
                         confidences.append(confidence)
-                    else:
-                        self.logger.warning(f"Belief '{name}' has invalid confidence: {confidence}")
                 else:
-                    self.logger.warning(f"Belief '{name}' is invalid, skipping confidence calculation")
+                    self.logger.log_warning(f"Belief '{name}' is invalid, skipping confidence calculation", component="beliefs")
             
             if not confidences:
                 return 0.0
@@ -562,53 +516,8 @@ class BeliefState:
             return clip_values(np.array([avg_confidence]), 0.0, 1.0)[0]
             
         except Exception as e:
-            self.logger.error(f"Error computing average confidence: {e}")
+            self._record_error("get_average_confidence", "calculation")
             return 0.0
-    
-    def save_snapshot(self) -> None:
-        """Save current state to history.
-        
-        Raises:
-            ValidationError: If snapshot creation fails
-        """
-        try:
-            snapshot = {
-                'timestamp': np.datetime64('now'),
-                'beliefs': {},
-                'total_entropy': 0.0,
-                'average_confidence': 0.0
-            }
-            
-            # Save beliefs that are valid
-            for name, belief in self._beliefs.items():
-                if belief.is_valid():
-                    try:
-                        snapshot['beliefs'][name] = {
-                            'mean': belief.mean.copy(),
-                            'variance': belief.variance.copy(),
-                            'entropy': belief.entropy,
-                            'confidence': belief.confidence
-                        }
-                    except Exception as e:
-                        self.logger.warning(f"Failed to snapshot belief '{name}': {e}")
-                else:
-                    self.logger.warning(f"Skipping invalid belief '{name}' in snapshot")
-            
-            # Save aggregate statistics
-            snapshot['total_entropy'] = self.total_entropy()
-            snapshot['average_confidence'] = self.average_confidence()
-            
-            self._history.append(snapshot)
-            
-            # Trim history if too long
-            if len(self._history) > self._max_history_length:
-                trim_size = self._max_history_length // 2
-                self._history = self._history[-trim_size:]
-                self.logger.debug(f"Trimmed belief history to {trim_size} snapshots")
-            
-        except Exception as e:
-            self._record_error("save_snapshot", "")
-            raise ValidationError(f"Failed to save belief snapshot: {e}")
     
     def get_history(self) -> list:
         """Get belief evolution history.
@@ -619,7 +528,6 @@ class BeliefState:
         try:
             return self._history.copy()
         except Exception as e:
-            self.logger.error(f"Error getting history: {e}")
             return []
     
     def _record_error(self, operation: str, belief_name: str) -> None:
@@ -635,33 +543,32 @@ class BeliefState:
             'belief_name': belief_name,
             'timestamp': np.datetime64('now')
         }
-        self.logger.error(f"BeliefState error in {operation} for belief '{belief_name}'")
-    
+
     def validate_all_beliefs(self) -> Dict[str, bool]:
         """Validate all beliefs and return status.
-        
+
         Returns:
             Dictionary mapping belief names to validation status
         """
         try:
             validation_results = {}
-            
+
             for name, belief in self._beliefs.items():
                 try:
                     validation_results[name] = belief.is_valid()
                 except Exception as e:
-                    self.logger.warning(f"Error validating belief '{name}': {e}")
                     validation_results[name] = False
-            
+                    self.logger.log_error(f"Error validating belief '{name}': {e}", component="beliefs")
+
             return validation_results
-            
+
         except Exception as e:
-            self.logger.error(f"Error validating beliefs: {e}")
+            self._record_error("validate_all_beliefs", "validation")
             return {}
-    
+
     def remove_invalid_beliefs(self) -> int:
         """Remove all invalid beliefs from the state.
-        
+
         Returns:
             Number of beliefs removed
         """
@@ -674,17 +581,16 @@ class BeliefState:
             
             for name in invalid_beliefs:
                 del self._beliefs[name]
-                self.logger.info(f"Removed invalid belief '{name}'")
-            
+
             return len(invalid_beliefs)
-            
+
         except Exception as e:
-            self.logger.error(f"Error removing invalid beliefs: {e}")
+            self._record_error("remove_invalid_beliefs", "removal")
             return 0
-    
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get belief state statistics.
-        
+
         Returns:
             Dictionary with various statistics
         """
@@ -692,7 +598,7 @@ class BeliefState:
             validation_results = self.validate_all_beliefs()
             valid_count = sum(validation_results.values())
             total_count = len(self._beliefs)
-            
+
             return {
                 'total_beliefs': total_count,
                 'valid_beliefs': valid_count,
@@ -705,13 +611,13 @@ class BeliefState:
             }
             
         except Exception as e:
-            self.logger.error(f"Error getting statistics: {e}")
-            return {'error': str(e)}
-    
-    def __len__(self) -> int:
-        """Number of beliefs in the state."""
-        return len(self._beliefs)
-    
+            self._record_error("get_statistics", "calculation")
+            return {
+                'total_beliefs': len(self._beliefs),
+                'valid_beliefs': 0,
+                'error': str(e)
+            }
+
     def __contains__(self, name: str) -> bool:
         """Check if a belief exists.
         
@@ -741,7 +647,7 @@ class BeliefState:
             Belief object
             
         Raises:
-            KeyError: If belief doesn't exist
+            KeyError: If belief does not exist
             ValidationError: If belief is invalid
         """
         try:
@@ -767,11 +673,11 @@ class BeliefState:
     
     def __setitem__(self, name: str, belief: Belief) -> None:
         """Set belief by name using bracket notation.
-        
+
         Args:
             name: Name for the belief
             belief: Belief object to store
-            
+
         Raises:
             ValidationError: If inputs are invalid
         """
